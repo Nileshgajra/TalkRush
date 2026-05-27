@@ -71,6 +71,8 @@ export default function ChatScreen() {
 
     socket.off('seen');
 
+    socket.io.off('reconnect');
+
     // MATCHED
     socket.on(
       'matched',
@@ -102,7 +104,6 @@ export default function ChatScreen() {
 
         setTyping(false);
 
-        // AUTO SEEN
         socket.emit('seen');
 
         setMessages((prev) => [
@@ -181,6 +182,34 @@ export default function ChatScreen() {
       }
     );
 
+    // RECONNECT
+    socket.io.on(
+      'reconnect',
+      () => {
+
+        console.log(
+          'Reconnected'
+        );
+
+        setStatus('Online');
+
+        router.replace({
+
+          pathname: '/searching',
+
+          params: {
+            myName: params.myName,
+            myAge: params.myAge,
+            myGender: params.myGender,
+            genderFilter:
+              params.genderFilter,
+          },
+
+        });
+
+      }
+    );
+
     return () => {
 
       socket.off('matched');
@@ -192,6 +221,8 @@ export default function ChatScreen() {
       socket.off('disconnected');
 
       socket.off('seen');
+
+      socket.io.off('reconnect');
 
     };
 
@@ -271,9 +302,9 @@ export default function ChatScreen() {
       pathname: '/searching',
 
       params: {
-        name: params.myName,
-        age: params.myAge,
-        gender: params.myGender,
+        myName: params.myName,
+        myAge: params.myAge,
+        myGender: params.myGender,
         genderFilter:
           params.genderFilter,
       },
@@ -312,7 +343,6 @@ export default function ChatScreen() {
 
       <View style={styles.container}>
 
-        {/* HEADER */}
         <View style={styles.header}>
 
           <View style={styles.avatar}>
@@ -364,7 +394,6 @@ export default function ChatScreen() {
 
         </View>
 
-        {/* CHAT */}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -410,7 +439,6 @@ export default function ChatScreen() {
           )}
         />
 
-        {/* TYPING */}
         {typing && (
 
           <View
@@ -436,7 +464,6 @@ export default function ChatScreen() {
 
         )}
 
-        {/* SEEN */}
         {seen && (
 
           <Text style={styles.seenText}>
@@ -445,12 +472,10 @@ export default function ChatScreen() {
 
         )}
 
-        {/* INPUT */}
         <View
           style={styles.inputContainer}
         >
 
-          {/* NEXT */}
           <TouchableOpacity
             style={styles.nextButton}
             onPress={nextUser}
@@ -464,7 +489,6 @@ export default function ChatScreen() {
 
           </TouchableOpacity>
 
-          {/* INPUT */}
           <TextInput
             value={message}
             onChangeText={(text) => {
@@ -481,7 +505,6 @@ export default function ChatScreen() {
             blurOnSubmit={false}
           />
 
-          {/* SEND */}
           <TouchableOpacity
             style={styles.sendButton}
             onPress={sendMessage}
@@ -499,7 +522,6 @@ export default function ChatScreen() {
 
       </View>
 
-      {/* AD MODAL */}
       <Modal
         visible={showAdModal}
         transparent
