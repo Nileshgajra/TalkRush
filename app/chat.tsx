@@ -27,13 +27,27 @@ import socket from '../socket';
 
 export default function ChatScreen() {
 
-  const params = useLocalSearchParams();
+  const params =
+    useLocalSearchParams();
 
-  const [stranger, setStranger] = useState({
-    name: params.strangerName || '',
-    age: params.strangerAge || '',
-    gender: params.strangerGender || '',
-  });
+  const flatListRef =
+    useRef<any>(null);
+
+  const disconnectTimer =
+    useRef<any>(null);
+
+  const isLeavingRef =
+    useRef(false);
+
+  const [stranger, setStranger] =
+    useState<any>({
+      name:
+        params.strangerName || '',
+      age:
+        params.strangerAge || '',
+      gender:
+        params.strangerGender || '',
+    });
 
   const [message, setMessage] =
     useState('');
@@ -51,34 +65,34 @@ export default function ChatScreen() {
     useState(false);
 
   const [skipCount, setSkipCount] =
-    useState(0);
+    useState<number>(0);
 
   const [showAdModal, setShowAdModal] =
     useState(false);
 
-  const flatListRef =
-    useRef<FlatList>(null);
-
   useEffect(() => {
 
     socket.off('matched');
-
     socket.off('message');
-
     socket.off('typing');
-
-    socket.off('disconnected');
-
     socket.off('seen');
-
-    socket.io.off('reconnect');
+    socket.off('disconnected');
 
     // MATCHED
     socket.on(
       'matched',
       (userData) => {
 
-        console.log('Matched');
+        console.log(
+          'Matched Successfully'
+        );
+
+        clearTimeout(
+          disconnectTimer.current
+        );
+
+        isLeavingRef.current =
+          false;
 
         setStatus('Online');
 
@@ -161,11 +175,26 @@ export default function ChatScreen() {
       'disconnected',
       () => {
 
+        if (
+          isLeavingRef.current
+        ) {
+
+          console.log(
+            'Manual next pressed'
+          );
+
+          isLeavingRef.current =
+            false;
+
+          return;
+
+        }
+
         console.log(
           'Partner disconnected'
         );
 
-        setStatus('Offline');
+        setStatus('Searching');
 
         setTyping(false);
 
@@ -174,38 +203,36 @@ export default function ChatScreen() {
         setMessages([]);
 
         setStranger({
-          name: 'Disconnected',
+          name: 'Searching...',
           age: '',
           gender: '',
         });
 
-      }
-    );
+        disconnectTimer.current =
+          setTimeout(() => {
 
-    // RECONNECT
-    socket.io.on(
-      'reconnect',
-      () => {
+            router.replace({
 
-        console.log(
-          'Reconnected'
-        );
+              pathname:
+                '/searching',
 
-        setStatus('Online');
+              params: {
+                name:
+                  params.myName,
 
-        router.replace({
+                age:
+                  params.myAge,
 
-          pathname: '/searching',
+                gender:
+                  params.myGender,
 
-          params: {
-            myName: params.myName,
-            myAge: params.myAge,
-            myGender: params.myGender,
-            genderFilter:
-              params.genderFilter,
-          },
+                genderFilter:
+                  params.genderFilter,
+              },
 
-        });
+            });
+
+          }, 1500);
 
       }
     );
@@ -213,16 +240,10 @@ export default function ChatScreen() {
     return () => {
 
       socket.off('matched');
-
       socket.off('message');
-
       socket.off('typing');
-
-      socket.off('disconnected');
-
       socket.off('seen');
-
-      socket.io.off('reconnect');
+      socket.off('disconnected');
 
     };
 
@@ -231,7 +252,8 @@ export default function ChatScreen() {
   // SEND MESSAGE
   const sendMessage = () => {
 
-    if (!message.trim()) return;
+    if (!message.trim())
+      return;
 
     setSeen(false);
 
@@ -267,6 +289,14 @@ export default function ChatScreen() {
   // NEXT USER
   const nextUser = () => {
 
+    if (
+      isLeavingRef.current
+    )
+      return;
+
+    isLeavingRef.current =
+      true;
+
     if (skipCount >= 4) {
 
       setShowAdModal(true);
@@ -279,13 +309,23 @@ export default function ChatScreen() {
       prev + 1
     );
 
+    clearTimeout(
+      disconnectTimer.current
+    );
+
+    socket.off('matched');
+    socket.off('message');
+    socket.off('typing');
+    socket.off('seen');
+    socket.off('disconnected');
+
     setMessages([]);
 
     setSeen(false);
 
     setTyping(false);
 
-    setStatus('Offline');
+    setStatus('Searching');
 
     setStranger({
       name: 'Searching...',
@@ -302,9 +342,9 @@ export default function ChatScreen() {
       pathname: '/searching',
 
       params: {
-        myName: params.myName,
-        myAge: params.myAge,
-        myGender: params.myGender,
+        name: params.myName,
+        age: params.myAge,
+        gender: params.myGender,
         genderFilter:
           params.genderFilter,
       },
@@ -318,6 +358,12 @@ export default function ChatScreen() {
     if (status === 'Online') {
 
       return '#22C55E';
+
+    }
+
+    if (status === 'Searching') {
+
+      return '#00E0FF';
 
     }
 
@@ -407,13 +453,6 @@ export default function ChatScreen() {
           contentContainerStyle={
             styles.chatContainer
           }
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd(
-              {
-                animated: true,
-              }
-            )
-          }
           renderItem={({ item }) => (
 
             <View
@@ -502,7 +541,6 @@ export default function ChatScreen() {
             placeholderTextColor="#64748B"
             style={styles.input}
             multiline
-            blurOnSubmit={false}
           />
 
           <TouchableOpacity

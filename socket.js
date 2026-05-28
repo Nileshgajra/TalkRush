@@ -1,15 +1,9 @@
 import { io } from 'socket.io-client';
 
 const socket = io(
-  'http://192.168.1.54:3000',
+  'http://192.168.1.19:3000',
   {
     transports: ['websocket'],
-
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    timeout: 10000,
-
     autoConnect: true,
   }
 );
@@ -23,36 +17,10 @@ socket.on('connect', () => {
 
 });
 
-socket.on('disconnect', (reason) => {
+socket.on('disconnect', () => {
 
   console.log(
-    'Socket Disconnected:',
-    reason
-  );
-
-});
-
-socket.io.on('reconnect', () => {
-
-  console.log(
-    'Socket Reconnected'
-  );
-
-});
-
-socket.io.on('reconnect_attempt', () => {
-
-  console.log(
-    'Trying To Reconnect...'
-  );
-
-});
-
-socket.io.on('reconnect_error', (error) => {
-
-  console.log(
-    'Reconnect Error:',
-    error
+    'Socket Disconnected'
   );
 
 });
