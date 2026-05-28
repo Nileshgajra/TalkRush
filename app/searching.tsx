@@ -1,11 +1,13 @@
 import React, {
   useEffect,
+  useState,
 } from 'react';
 
 import {
   ActivityIndicator,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -27,13 +29,58 @@ export default function SearchingScreen() {
     genderFilter,
   } = useLocalSearchParams();
 
+  const [dots, setDots] =
+    useState('');
+
+  const [seconds, setSeconds] =
+    useState(0);
+
+  // TIMER
+  useEffect(() => {
+
+    const timer =
+      setInterval(() => {
+
+        setSeconds((prev) =>
+          prev + 1
+        );
+
+      }, 1000);
+
+    return () =>
+      clearInterval(timer);
+
+  }, []);
+
+  // DOT ANIMATION
+  useEffect(() => {
+
+    const dotInterval =
+      setInterval(() => {
+
+        setDots((prev) => {
+
+          if (prev.length >= 3)
+            return '';
+
+          return prev + '.';
+
+        });
+
+      }, 500);
+
+    return () =>
+      clearInterval(dotInterval);
+
+  }, []);
+
+  // SOCKET SEARCH
   useEffect(() => {
 
     console.log(
       'Searching Started'
     );
 
-    // REMOVE OLD EVENTS
     socket.off('matched');
     socket.off('searching');
     socket.off('disconnected');
@@ -113,26 +160,65 @@ export default function SearchingScreen() {
 
   }, []);
 
+  // CANCEL SEARCH
+  const cancelSearch = () => {
+
+    router.back();
+
+  };
+
   return (
 
     <View style={styles.container}>
 
-      <View style={styles.circle}>
+      {/* OUTER GLOW */}
+      <View style={styles.outerCircle}>
 
-        <ActivityIndicator
-          size="large"
-          color="#00E0FF"
-        />
+        {/* INNER CIRCLE */}
+        <View style={styles.circle}>
+
+          <ActivityIndicator
+            size="large"
+            color="#00E0FF"
+          />
+
+        </View>
 
       </View>
 
+      {/* TITLE */}
       <Text style={styles.title}>
-        Finding Stranger...
+        Finding Stranger{dots}
       </Text>
 
+      {/* SUBTITLE */}
       <Text style={styles.subTitle}>
         Matching you anonymously
       </Text>
+
+      {/* HINT */}
+      <Text style={styles.hint}>
+        Please wait while we find someone
+      </Text>
+
+      {/* TIMER */}
+      <Text style={styles.timer}>
+        Searching for {seconds}s
+      </Text>
+
+      {/* CANCEL BUTTON */}
+      <TouchableOpacity
+        style={styles.cancelButton}
+        onPress={cancelSearch}
+      >
+
+        <Text
+          style={styles.cancelText}
+        >
+          Cancel Search
+        </Text>
+
+      </TouchableOpacity>
 
     </View>
 
@@ -147,28 +233,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#020617',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+
+  outerCircle: {
+    width: 150,
+    height: 150,
+    borderRadius: 999,
+    backgroundColor:
+      'rgba(0,224,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 40,
   },
 
   circle: {
     width: 110,
     height: 110,
-    borderRadius: 100,
+    borderRadius: 999,
     backgroundColor: '#081225',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
   },
 
   title: {
     color: '#00E0FF',
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 10,
+    fontSize: 30,
+    fontWeight: '800',
+    marginBottom: 12,
   },
 
   subTitle: {
     color: '#94A3B8',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+
+  hint: {
+    color: '#475569',
+    fontSize: 13,
+    marginTop: 10,
+  },
+
+  timer: {
+    color: '#64748B',
+    fontSize: 14,
+    marginTop: 18,
+  },
+
+  cancelButton: {
+    marginTop: 45,
+    backgroundColor: '#172033',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 20,
+  },
+
+  cancelText: {
+    color: 'white',
     fontSize: 15,
+    fontWeight: '700',
   },
 
 });
