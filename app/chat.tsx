@@ -26,7 +26,6 @@ import {
 import {
   BannerAd,
   BannerAdSize,
-  TestIds,
 } from 'react-native-google-mobile-ads';
 import socket from '../socket';
 
@@ -519,7 +518,7 @@ export default function ChatScreen() {
 
 <View style={styles.bannerContainer}>
   <BannerAd
-    unitId={TestIds.BANNER}
+  unitId="ca-app-pub-6592726204956042/5797951306"
     size={BannerAdSize.BANNER}
   />
 </View>
