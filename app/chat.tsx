@@ -23,6 +23,11 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import {
+  BannerAd,
+  BannerAdSize,
+  TestIds,
+} from 'react-native-google-mobile-ads';
 import socket from '../socket';
 
 export default function ChatScreen() {
@@ -65,7 +70,9 @@ export default function ChatScreen() {
     useState(false);
 
   const [skipCount, setSkipCount] =
-    useState<number>(0);
+  useState<number>(
+    Number(params.skipCount || 0)
+  );
 
   const [showAdModal, setShowAdModal] =
     useState(false);
@@ -289,10 +296,15 @@ export default function ChatScreen() {
   // NEXT USER
   const nextUser = () => {
 
-    if (
-      isLeavingRef.current
-    )
-      return;
+  console.log(
+    'Skip Count:',
+    skipCount
+  );
+
+  if (
+    isLeavingRef.current
+  )
+    return;
 
     isLeavingRef.current =
       true;
@@ -338,18 +350,16 @@ export default function ChatScreen() {
     );
 
     router.replace({
+  pathname: '/searching',
+  params: {
+    name: params.myName,
+    age: params.myAge,
+    gender: params.myGender,
+    genderFilter: params.genderFilter,
 
-      pathname: '/searching',
-
-      params: {
-        name: params.myName,
-        age: params.myAge,
-        gender: params.myGender,
-        genderFilter:
-          params.genderFilter,
-      },
-
-    });
+    skipCount: skipCount + 1,
+  },
+});
 
   };
 
@@ -380,11 +390,7 @@ export default function ChatScreen() {
           ? 'padding'
           : 'height'
       }
-      keyboardVerticalOffset={
-        Platform.OS === 'ios'
-          ? 0
-          : 25
-      }
+      keyboardVerticalOffset={0}
     >
 
       <View style={styles.container}>
@@ -505,15 +511,22 @@ export default function ChatScreen() {
 
         {seen && (
 
-          <Text style={styles.seenText}>
-            Seen
-          </Text>
+  <Text style={styles.seenText}>
+    Seen
+  </Text>
 
-        )}
+)}
 
-        <View
-          style={styles.inputContainer}
-        >
+<View style={styles.bannerContainer}>
+  <BannerAd
+    unitId={TestIds.BANNER}
+    size={BannerAdSize.BANNER}
+  />
+</View>
+
+<View
+  style={styles.inputContainer}
+>
 
           <TouchableOpacity
             style={styles.nextButton}
@@ -741,6 +754,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     fontSize: 12,
   },
+
+  bannerContainer: {
+  alignItems: 'center',
+  backgroundColor: '#020617',
+  paddingVertical: 4,
+},
 
   inputContainer: {
     flexDirection: 'row',

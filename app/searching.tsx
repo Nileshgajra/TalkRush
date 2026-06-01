@@ -27,6 +27,7 @@ export default function SearchingScreen() {
     age,
     gender,
     genderFilter,
+    skipCount,
   } = useLocalSearchParams();
 
   const [dots, setDots] =
@@ -123,6 +124,8 @@ export default function SearchingScreen() {
           pathname: '/chat',
 
           params: {
+
+            skipCount,
 
             myName: name,
             myAge: age,
