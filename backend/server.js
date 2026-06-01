@@ -414,14 +414,15 @@ io.on(
   }
 );
 
+const PORT =
+  process.env.PORT || 3000;
+
 server.listen(
-  3000,
+  PORT,
   '0.0.0.0',
   () => {
-
     console.log(
-      'Socket.IO Running On Port 3000'
+      `Socket.IO Running On Port ${PORT}`
     );
-
   }
 );
