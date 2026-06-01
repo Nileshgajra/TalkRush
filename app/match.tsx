@@ -1,6 +1,6 @@
 // match.tsx
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import {
   SafeAreaView,
@@ -15,6 +15,15 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import {
+  RewardedAd,
+  RewardedAdEventType,
+  TestIds,
+} from 'react-native-google-mobile-ads';
+
+const rewarded = RewardedAd.createForAdRequest(
+  TestIds.REWARDED
+);
 export default function MatchScreen() {
 
   const params = useLocalSearchParams();
@@ -24,6 +33,34 @@ export default function MatchScreen() {
 
   const [selectedGender, setSelectedGender] =
     useState('');
+
+    useEffect(() => {
+
+  rewarded.load();
+
+  const unsubscribe =
+    rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      () => {
+
+        router.push({
+          pathname: '/searching',
+          params: {
+            name: params.name,
+            age: params.age,
+            gender: params.gender,
+            genderFilter: selectedGender,
+          },
+        });
+
+        rewarded.load();
+
+      }
+    );
+
+  return unsubscribe;
+
+}, [selectedGender]);
 
   // RANDOM CHAT
   const startRandomChat = () => {
@@ -51,23 +88,11 @@ export default function MatchScreen() {
   // CONTINUE GENDER MATCH
   const continueGenderMatch = () => {
 
-    if (!selectedGender) return;
+  if (!selectedGender) return;    
+  rewarded.load();
+  rewarded.show();
 
-    // LATER:
-    // SHOW REWARDED AD HERE
-
-    router.push({
-      pathname: '/searching',
-
-      params: {
-        name: params.name,
-        age: params.age,
-        gender: params.gender,
-        genderFilter: selectedGender,
-      },
-    });
-
-  };
+};
 
   return (
 
