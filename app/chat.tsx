@@ -6,7 +6,6 @@ import React, {
 
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -15,7 +14,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
 import {
@@ -26,9 +25,15 @@ import {
 import {
   BannerAd,
   BannerAdSize,
+  RewardedAd,
+  RewardedAdEventType,
+  TestIds
 } from 'react-native-google-mobile-ads';
 import socket from '../socket';
 
+const rewarded = RewardedAd.createForAdRequest(
+  TestIds.REWARDED
+);
 export default function ChatScreen() {
 
   const params =
@@ -77,6 +82,27 @@ export default function ChatScreen() {
     useState(false);
 
   useEffect(() => {
+
+  rewarded.load();
+
+  const unsubscribe =
+    rewarded.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      () => {
+
+        setSkipCount(0);
+
+        setShowAdModal(false);
+
+        rewarded.load();
+
+      }
+    );
+
+  return unsubscribe;
+
+}, []);
+useEffect(() => {
 
     socket.off('matched');
     socket.off('message');
@@ -600,16 +626,9 @@ export default function ChatScreen() {
               style={styles.watchButton}
               onPress={() => {
 
-                Alert.alert(
-                  'Rewarded Ad',
-                  'Ad watched successfully'
-                );
+                rewarded.show();
 
-                setShowAdModal(false);
-
-                setSkipCount(0);
-
-              }}
+           }}
             >
 
               <Text
