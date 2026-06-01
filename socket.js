@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 
 const socket = io(
-  'http://192.168.1.19:3000',
+  'https://talkrush.onrender.com',
   {
     transports: ['websocket'],
     autoConnect: true,
