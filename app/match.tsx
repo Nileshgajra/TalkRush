@@ -65,13 +65,14 @@ useEffect(() => {
         setAdLoaded(false);
         rewarded.load();
 
+      
       }
     );
 
-  return () => {
-    loadedListener();
-    rewardListener();
-  };
+ return () => {
+  loadedListener();
+  rewardListener();
+};
 
 }, []);
 
