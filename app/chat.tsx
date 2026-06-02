@@ -94,6 +94,9 @@ export default function ChatScreen() {
 
         setShowAdModal(false);
 
+        isLeavingRef.current = false;
+
+
         rewarded.load();
 
       }
