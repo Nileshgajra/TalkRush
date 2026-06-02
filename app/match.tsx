@@ -43,6 +43,7 @@ useEffect(() => {
     rewarded.addAdEventListener(
       RewardedAdEventType.LOADED,
       () => {
+        console.log('REWARDED AD LOADED');
         setAdLoaded(true);
       }
     );
