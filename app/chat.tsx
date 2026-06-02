@@ -26,13 +26,12 @@ import {
   BannerAd,
   BannerAdSize,
   RewardedAd,
-  RewardedAdEventType,
-  TestIds
+  RewardedAdEventType
 } from 'react-native-google-mobile-ads';
 import socket from '../socket';
 
 const rewarded = RewardedAd.createForAdRequest(
-  TestIds.REWARDED
+  'ca-app-pub-6592726204956042/9182662547'
 );
 export default function ChatScreen() {
 
