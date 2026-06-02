@@ -33,12 +33,22 @@ export default function MatchScreen() {
 
   const [selectedGender, setSelectedGender] =
     useState('');
+    const [adLoaded, setAdLoaded] =
+  useState(false);
 
-    useEffect(() => {
+useEffect(() => {
 
   rewarded.load();
 
-  const unsubscribe =
+  const loadedListener =
+    rewarded.addAdEventListener(
+      RewardedAdEventType.LOADED,
+      () => {
+        setAdLoaded(true);
+      }
+    );
+
+  const rewardListener =
     rewarded.addAdEventListener(
       RewardedAdEventType.EARNED_REWARD,
       () => {
@@ -53,12 +63,16 @@ export default function MatchScreen() {
           },
         });
 
+        setAdLoaded(false);
         rewarded.load();
 
       }
     );
 
-  return unsubscribe;
+  return () => {
+    loadedListener();
+    rewardListener();
+  };
 
 }, []);
 
@@ -88,7 +102,14 @@ export default function MatchScreen() {
   // CONTINUE GENDER MATCH
   const continueGenderMatch = () => {
 
-  if (!selectedGender) return;    
+  if (!selectedGender) return;
+
+  if (!adLoaded) {
+    alert('Ad loading, try again');
+    return;
+  }
+
+  setAdLoaded(false);
   rewarded.show();
 
 };
