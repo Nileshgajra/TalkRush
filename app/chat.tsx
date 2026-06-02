@@ -545,8 +545,17 @@ useEffect(() => {
 <View style={styles.bannerContainer}>
   <BannerAd
   unitId="ca-app-pub-6592726204956042/5797951306"
-    size={BannerAdSize.BANNER}
-  />
+  size={BannerAdSize.BANNER}
+  onAdLoaded={() =>
+    console.log('Banner Loaded')
+  }
+  onAdFailedToLoad={(error) =>
+    console.log(
+      'Banner Failed',
+      error
+    )
+  }
+/>
 </View>
 
 <View
