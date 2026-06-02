@@ -60,7 +60,7 @@ export default function MatchScreen() {
 
   return unsubscribe;
 
-}, [selectedGender]);
+}, []);
 
   // RANDOM CHAT
   const startRandomChat = () => {
@@ -89,7 +89,6 @@ export default function MatchScreen() {
   const continueGenderMatch = () => {
 
   if (!selectedGender) return;    
-  rewarded.load();
   rewarded.show();
 
 };
