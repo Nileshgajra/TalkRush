@@ -166,9 +166,16 @@ export default function SearchingScreen() {
   // CANCEL SEARCH
   const cancelSearch = () => {
 
-    router.back();
+  router.replace({
+    pathname: '/match',
+    params: {
+      name,
+      age,
+      gender,
+    },
+  });
 
-  };
+};
 
   return (
 

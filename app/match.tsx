@@ -20,6 +20,7 @@ import {
   RewardedAdEventType
 } from 'react-native-google-mobile-ads';
 
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function MatchScreen() {
 
@@ -35,6 +36,25 @@ export default function MatchScreen() {
 
     const [rewarded, setRewarded] =
   useState<any>(null);
+
+  useFocusEffect(
+  React.useCallback(() => {
+
+    const newRewarded =
+      RewardedAd.createForAdRequest(
+        'ca-app-pub-6592726204956042/9182662547'
+      );
+
+    setRewarded(newRewarded);
+
+    setAdLoaded(false);
+
+    newRewarded.load();
+
+    return () => {};
+
+  }, [])
+);
 
 useEffect(() => {
 
@@ -117,9 +137,12 @@ newRewarded.load();
     alert('Ad loading, try again');
     return;
   }
-
+  
   setAdLoaded(false);
+
+if (rewarded) {
   rewarded.show();
+}
 
 };
 
