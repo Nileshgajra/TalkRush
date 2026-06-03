@@ -20,9 +20,7 @@ import {
   RewardedAdEventType
 } from 'react-native-google-mobile-ads';
 
-const rewarded = RewardedAd.createForAdRequest(
-  'ca-app-pub-6592726204956042/9182662547'
-);
+
 export default function MatchScreen() {
 
   const params = useLocalSearchParams();
@@ -35,12 +33,22 @@ export default function MatchScreen() {
     const [adLoaded, setAdLoaded] =
   useState(false);
 
+    const [rewarded, setRewarded] =
+  useState<any>(null);
+
 useEffect(() => {
 
-  rewarded.load();
+  const newRewarded =
+  RewardedAd.createForAdRequest(
+    'ca-app-pub-6592726204956042/9182662547'
+  );
+
+setRewarded(newRewarded);
+
+newRewarded.load();
 
   const loadedListener =
-    rewarded.addAdEventListener(
+    newRewarded.addAdEventListener(
       RewardedAdEventType.LOADED,
       () => {
         console.log('REWARDED AD LOADED');
@@ -49,7 +57,7 @@ useEffect(() => {
     );
 
   const rewardListener =
-    rewarded.addAdEventListener(
+  newRewarded.addAdEventListener(
       RewardedAdEventType.EARNED_REWARD,
       () => {
 
@@ -64,7 +72,7 @@ useEffect(() => {
         });
 
         setAdLoaded(false);
-        rewarded.load();
+        newRewarded.load();
 
       
       }
