@@ -20,41 +20,26 @@ import {
   RewardedAdEventType
 } from 'react-native-google-mobile-ads';
 
-import { useFocusEffect } from '@react-navigation/native';
 
 export default function MatchScreen() {
 
   const params = useLocalSearchParams();
 
   const [showGenderSelect, setShowGenderSelect] =
-    useState(false);
+  useState(false);
 
-  const [selectedGender, setSelectedGender] =
-    useState('');
-    const [adLoaded, setAdLoaded] =
+const [selectedGender, setSelectedGender] =
+  useState('');
+
+const selectedGenderRef =
+  React.useRef('');
+
+const [adLoaded, setAdLoaded] =
   useState(false);
 
     const [rewarded, setRewarded] =
   useState<any>(null);
 
-  useFocusEffect(
-  React.useCallback(() => {
-
-    const newRewarded =
-      RewardedAd.createForAdRequest(
-        'ca-app-pub-6592726204956042/9182662547'
-      );
-
-    setRewarded(newRewarded);
-
-    setAdLoaded(false);
-
-    newRewarded.load();
-
-    return () => {};
-
-  }, [])
-);
 
 useEffect(() => {
 
@@ -87,7 +72,7 @@ newRewarded.load();
             name: params.name,
             age: params.age,
             gender: params.gender,
-            genderFilter: selectedGender,
+            genderFilter: selectedGenderRef.current,
           },
         });
 
@@ -137,10 +122,15 @@ newRewarded.load();
     alert('Ad loading, try again');
     return;
   }
-  
-  setAdLoaded(false);
+
 
 if (rewarded) {
+
+  console.log(
+    'Selected Gender:',
+    selectedGenderRef.current
+  );
+
   rewarded.show();
 }
 
@@ -208,9 +198,10 @@ if (rewarded) {
                 selectedGender === 'Male' &&
                   styles.activeGender,
               ]}
-              onPress={() =>
-                setSelectedGender('Male')
-              }
+              onPress={() => {
+  setSelectedGender('Male');
+  selectedGenderRef.current = 'Male';
+}}
             >
 
               <Text style={styles.genderText}>
@@ -228,11 +219,10 @@ if (rewarded) {
                   'Female' &&
                   styles.activeGender,
               ]}
-              onPress={() =>
-                setSelectedGender(
-                  'Female'
-                )
-              }
+              onPress={() => {
+  setSelectedGender('Female');
+  selectedGenderRef.current = 'Female';
+}}
             >
 
               <Text style={styles.genderText}>

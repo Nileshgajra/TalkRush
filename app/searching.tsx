@@ -166,6 +166,8 @@ export default function SearchingScreen() {
   // CANCEL SEARCH
   const cancelSearch = () => {
 
+    socket.emit('disconnect-partner');
+
   router.replace({
     pathname: '/match',
     params: {
