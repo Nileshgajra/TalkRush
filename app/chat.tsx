@@ -22,6 +22,8 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+
+
 import {
   BannerAd,
   BannerAdSize,

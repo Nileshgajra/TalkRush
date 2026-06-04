@@ -15,6 +15,8 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+import { useFocusEffect } from '@react-navigation/native';
+
 import {
   RewardedAd,
   RewardedAdEventType
@@ -78,6 +80,7 @@ newRewarded.load();
 
         setAdLoaded(false);
         newRewarded.load();
+        setShowGenderSelect(false);
 
       
       }
@@ -86,9 +89,27 @@ newRewarded.load();
  return () => {
   loadedListener();
   rewardListener();
-};
+}; 
 
 }, []);
+
+useFocusEffect(
+  React.useCallback(() => {
+
+    if (rewarded) {
+
+      setAdLoaded(false);
+
+      rewarded.load();
+
+      console.log(
+        'Reloading rewarded ad'
+      );
+
+    }
+
+  }, [rewarded])
+);
 
   // RANDOM CHAT
   const startRandomChat = () => {
@@ -109,9 +130,9 @@ newRewarded.load();
   // OPEN GENDER SELECTION
   const openGenderMatch = () => {
 
-    setShowGenderSelect(true);
+  setShowGenderSelect(true);
 
-  };
+};
 
   // CONTINUE GENDER MATCH
   const continueGenderMatch = () => {
@@ -130,6 +151,8 @@ if (rewarded) {
     'Selected Gender:',
     selectedGenderRef.current
   );
+
+  console.log('adLoaded:', adLoaded);
 
   rewarded.show();
 }
