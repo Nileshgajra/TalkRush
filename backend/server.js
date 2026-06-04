@@ -141,15 +141,6 @@ io.on(
 
           }
 
-          else if (
-            randomQueue.length
-          ) {
-
-            partner =
-              randomQueue.shift();
-
-          }
-
         }
 
         // USER WANTS MALE
@@ -164,15 +155,6 @@ io.on(
 
             partner =
               maleQueue.shift();
-
-          }
-
-          else if (
-            randomQueue.length
-          ) {
-
-            partner =
-              randomQueue.shift();
 
           }
 
