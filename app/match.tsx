@@ -78,9 +78,13 @@ newRewarded.load();
           },
         });
 
+
         setAdLoaded(false);
         newRewarded.load();
         setShowGenderSelect(false);
+
+        setSelectedGender('');
+        selectedGenderRef.current = '';
 
       
       }
@@ -131,6 +135,10 @@ useFocusEffect(
   const openGenderMatch = () => {
 
   setShowGenderSelect(true);
+
+  console.log(
+    'Gender Match opened'
+  );
 
 };
 
