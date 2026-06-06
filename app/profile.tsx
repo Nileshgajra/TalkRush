@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 
-import React, { useState } from 'react';
-
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   StyleSheet,
@@ -11,6 +10,11 @@ import {
   View,
 } from 'react-native';
 
+import { RewardedAd } from 'react-native-google-mobile-ads';
+
+const rewarded = RewardedAd.createForAdRequest(
+  'ca-app-pub-6592726204956042/9182662547'
+);
 export default function ProfileScreen() {
 
   const router = useRouter();
@@ -20,6 +24,15 @@ export default function ProfileScreen() {
   const [age, setAge] = useState('');
 
   const [gender, setGender] = useState('');
+  useEffect(() => {
+
+  rewarded.load();
+
+  console.log(
+    'Preloading Gender Match Ad'
+  );
+
+}, []);
 
   const continueChat = () => {
 
