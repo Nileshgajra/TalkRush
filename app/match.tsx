@@ -54,6 +54,10 @@ setRewarded(newRewarded);
 
 newRewarded.load();
 
+console.log(
+  'TRYING TO LOAD REWARDED AD'
+);
+
   const loadedListener =
     newRewarded.addAdEventListener(
       RewardedAdEventType.LOADED,
@@ -62,6 +66,8 @@ newRewarded.load();
         setAdLoaded(true);
       }
     );
+
+    
 
   const rewardListener =
   newRewarded.addAdEventListener(
