@@ -25,7 +25,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.gajratechnologies.talkrush"
+      "package": "com.gajratechnologies.talkrush",
+"googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
