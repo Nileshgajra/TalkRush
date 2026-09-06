@@ -1,8 +1,8 @@
-// match.tsx
-
-import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
+  Alert,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -15,116 +15,51 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
-import { useFocusEffect } from '@react-navigation/native';
-
-import {
-  RewardedAd,
-  RewardedAdEventType
-} from 'react-native-google-mobile-ads';
-
+import { spendCoin } from './utils/coins';
 
 export default function MatchScreen() {
-
   const params = useLocalSearchParams();
 
   const [showGenderSelect, setShowGenderSelect] =
-  useState(false);
+    useState(false);
 
-const [selectedGender, setSelectedGender] =
-  useState('');
+  const [selectedGender, setSelectedGender] =
+    useState('');
 
-const selectedGenderRef =
-  React.useRef('');
+  const selectedGenderRef =
+    useRef('');
 
-const [adLoaded, setAdLoaded] =
-  useState(false);
+  const [coinBalance, setCoinBalance] =
+    useState(0);
 
-    const [rewarded, setRewarded] =
-  useState<any>(null);
+  // LOAD COIN BALANCE
+  const loadCoins = async () => {
+    try {
+      const savedCoins =
+        await AsyncStorage.getItem('talkrush_coins');
 
-
-useEffect(() => {
-
-  const newRewarded =
-  RewardedAd.createForAdRequest(
-    'ca-app-pub-6592726204956042/9182662547'
-  );
-
-setRewarded(newRewarded);
-
-newRewarded.load();
-
-console.log(
-  'TRYING TO LOAD REWARDED AD'
-);
-
-  const loadedListener =
-    newRewarded.addAdEventListener(
-      RewardedAdEventType.LOADED,
-      () => {
-        console.log('REWARDED AD LOADED');
-        setAdLoaded(true);
+      if (savedCoins === null) {
+        setCoinBalance(0);
+        return;
       }
-    );
-  
-    
-    
 
-  const rewardListener =
-  newRewarded.addAdEventListener(
-      RewardedAdEventType.EARNED_REWARD,
-      () => {
-
-        router.push({
-          pathname: '/searching',
-          params: {
-            name: params.name,
-            age: params.age,
-            gender: params.gender,
-            genderFilter: selectedGenderRef.current,
-          },
-        });
-
-
-        setAdLoaded(false);
-        newRewarded.load();
-        setShowGenderSelect(false);
-
-        setSelectedGender('');
-        selectedGenderRef.current = '';
-
-      
-      }
-    );
-
- return () => {
-  loadedListener();
-  rewardListener();
-}; 
-
-}, []);
-
-useFocusEffect(
-  React.useCallback(() => {
-
-    if (rewarded) {
-
-      setAdLoaded(false);
-
-      rewarded.load();
-
+      setCoinBalance(Number(savedCoins));
+    } catch (error) {
       console.log(
-        'Reloading rewarded ad'
+        'Error loading coins:',
+        error
       );
-
     }
+  };
 
-  }, [rewarded])
-);
+  useEffect(() => {
+    loadCoins();
+  }, []);
 
   // RANDOM CHAT
+  // FREE - NO COIN
+  // SKIP COUNT SYSTEM IS NOT CHANGED
   const startRandomChat = () => {
-
     router.push({
       pathname: '/searching',
 
@@ -132,164 +67,419 @@ useFocusEffect(
         name: params.name,
         age: params.age,
         gender: params.gender,
+
         genderFilter: 'Random',
+
+        // Keep existing skip count
+        skipCount:
+          params.skipCount || '0',
       },
     });
-
   };
 
-  // OPEN GENDER SELECTION
+  // OPEN GENDER MATCH
   const openGenderMatch = () => {
+    setShowGenderSelect(true);
 
-  setShowGenderSelect(true);
+    loadCoins();
 
-  console.log(
-    'Gender Match opened'
-  );
+    console.log(
+      'Gender Match opened'
+    );
+  };
 
-};
+  // SELECT GENDER
+  const selectGender = (
+    gender: string
+  ) => {
+    setSelectedGender(gender);
 
-  // CONTINUE GENDER MATCH
-  const continueGenderMatch = () => {
+    selectedGenderRef.current =
+      gender;
+  };
 
-  if (!selectedGender) return;
+  // GENDER MATCH
+  // COST = 1 COIN
+  const continueGenderMatch =
+    async () => {
 
-  if (!adLoaded) {
-    alert('Ad loading, try again');
-    return;
-  }
+      if (!selectedGender) {
+        return;
+      }
 
+      console.log(
+        'Selected Gender:',
+        selectedGenderRef.current
+      );
 
-if (rewarded) {
+      // CHECK + SPEND 1 COIN
+      const coinSpent =
+        await spendCoin();
 
-  console.log(
-    'Selected Gender:',
-    selectedGenderRef.current
-  );
+      if (!coinSpent) {
 
-  console.log('adLoaded:', adLoaded);
+        Alert.alert(
+          'Not Enough Coins',
+          'You need 1 coin to use Gender Match.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                loadCoins();
+              },
+            },
+          ]
+        );
 
-  rewarded.show();
-}
+        return;
+      }
 
-};
+      console.log(
+        '1 coin spent for Gender Match'
+      );
+
+      // SAVE SELECTED GENDER
+      const genderFilter =
+        selectedGenderRef.current;
+
+      // CLEAR SELECTION
+      setShowGenderSelect(false);
+
+      setSelectedGender('');
+
+      selectedGenderRef.current =
+        '';
+
+      // UPDATE BALANCE
+      await loadCoins();
+
+      // START GENDER SEARCH
+      router.push({
+        pathname: '/searching',
+
+        params: {
+          name: params.name,
+          age: params.age,
+          gender: params.gender,
+
+          genderFilter,
+
+          // KEEP SKIP COUNT
+          skipCount:
+            params.skipCount || '0',
+        },
+      });
+    };
 
   return (
+    <SafeAreaView
+      style={styles.container}
+    >
 
-    <SafeAreaView style={styles.container}>
+      {/* HEADER */}
+      <View style={styles.header}>
+
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backText}>
+            ‹
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.headerHeart}>
+          <Text
+            style={styles.headerHeartText}
+          >
+            ♥
+          </Text>
+        </View>
+
+        {/* COIN BALANCE */}
+        <View style={styles.coinBadge}>
+          <Text style={styles.coinText}>
+            🪙 {coinBalance}
+          </Text>
+        </View>
+
+      </View>
 
       {/* TITLE */}
-      <Text style={styles.title}>
-        Choose Match Type
-      </Text>
+      <View style={styles.titleSection}>
+
+        <Text style={styles.title}>
+          Find someone to talk to
+        </Text>
+
+        <Text style={styles.subtitle}>
+          Choose how you want to connect 💕
+        </Text>
+
+      </View>
 
       {/* RANDOM CHAT */}
       <TouchableOpacity
+        activeOpacity={0.86}
         style={styles.randomCard}
-        activeOpacity={0.8}
         onPress={startRandomChat}
       >
 
-        <Text style={styles.cardTitle}>
-          Random Chat
-        </Text>
+        <View style={styles.randomIcon}>
+          <Text
+            style={styles.randomIconText}
+          >
+            💬
+          </Text>
+        </View>
 
-        <Text style={styles.cardText}>
-          Free unlimited anonymous matching
+        <View style={styles.cardContent}>
+
+          <Text style={styles.randomTitle}>
+            Random Chat
+          </Text>
+
+          <Text style={styles.randomText}>
+            Meet someone new instantly
+          </Text>
+
+          <View style={styles.freeBadge}>
+            <Text
+              style={styles.freeBadgeText}
+            >
+              FREE
+            </Text>
+          </View>
+
+        </View>
+
+        <Text style={styles.whiteArrow}>
+          ›
         </Text>
 
       </TouchableOpacity>
 
       {/* GENDER MATCH */}
       <TouchableOpacity
-        style={styles.genderCard}
-        activeOpacity={0.8}
+        activeOpacity={0.86}
+        style={[
+          styles.genderCard,
+          showGenderSelect &&
+            styles.genderCardActive,
+        ]}
         onPress={openGenderMatch}
       >
 
-        <Text style={styles.cardTitle}>
-          Gender Match
-        </Text>
+        <View style={styles.genderIcon}>
+          <Text
+            style={styles.genderIconText}
+          >
+            ❤️
+          </Text>
+        </View>
 
-        <Text style={styles.cardText}>
-          Watch ad to match preferred gender
+        <View style={styles.cardContent}>
+
+          <Text style={styles.cardTitle}>
+            Gender Match
+          </Text>
+
+          <Text style={styles.cardText}>
+            Find someone by gender
+          </Text>
+
+          <View style={styles.coinBadgeSmall}>
+            <Text
+              style={styles.coinBadgeSmallText}
+            >
+              🪙 1 COIN
+            </Text>
+          </View>
+
+        </View>
+
+        <Text style={styles.darkArrow}>
+          ›
         </Text>
 
       </TouchableOpacity>
 
-      {/* GENDER SELECT BOX */}
+      {/* GENDER SELECTION */}
       {showGenderSelect && (
 
         <View style={styles.selectBox}>
 
-          <Text style={styles.selectTitle}>
-            Select Gender
-          </Text>
+          <View style={styles.selectHeader}>
 
+            <View>
+
+              <Text style={styles.selectTitle}>
+                Who would you like to meet?
+              </Text>
+
+              <Text
+                style={styles.selectSubtitle}
+              >
+                Choose one option
+              </Text>
+
+            </View>
+
+            <Text style={styles.selectHeart}>
+              ♥
+            </Text>
+
+          </View>
+
+          {/* GENDER BUTTONS */}
           <View style={styles.genderRow}>
 
             {/* MALE */}
             <TouchableOpacity
+              activeOpacity={0.8}
               style={[
-                styles.genderButton,
+                styles.genderChoice,
 
                 selectedGender === 'Male' &&
-                  styles.activeGender,
+                  styles.selectedGenderChoice,
               ]}
-              onPress={() => {
-  setSelectedGender('Male');
-  selectedGenderRef.current = 'Male';
-}}
+              onPress={() =>
+                selectGender('Male')
+              }
             >
 
-              <Text style={styles.genderText}>
+              <Text
+                style={styles.choiceEmoji}
+              >
+                👨
+              </Text>
+
+              <Text
+                style={[
+                  styles.choiceText,
+
+                  selectedGender === 'Male' &&
+                    styles.selectedChoiceText,
+                ]}
+              >
                 Male
               </Text>
+
+              {selectedGender === 'Male' && (
+
+                <View
+                  style={styles.checkCircle}
+                >
+
+                  <Text
+                    style={styles.checkText}
+                  >
+                    ✓
+                  </Text>
+
+                </View>
+
+              )}
 
             </TouchableOpacity>
 
             {/* FEMALE */}
             <TouchableOpacity
+              activeOpacity={0.8}
               style={[
-                styles.genderButton,
+                styles.genderChoice,
 
-                selectedGender ===
-                  'Female' &&
-                  styles.activeGender,
+                selectedGender === 'Female' &&
+                  styles.selectedGenderChoice,
               ]}
-              onPress={() => {
-  setSelectedGender('Female');
-  selectedGenderRef.current = 'Female';
-}}
+              onPress={() =>
+                selectGender('Female')
+              }
             >
 
-              <Text style={styles.genderText}>
+              <Text
+                style={styles.choiceEmoji}
+              >
+                👩
+              </Text>
+
+              <Text
+                style={[
+                  styles.choiceText,
+
+                  selectedGender === 'Female' &&
+                    styles.selectedChoiceText,
+                ]}
+              >
                 Female
               </Text>
+
+              {selectedGender === 'Female' && (
+
+                <View
+                  style={styles.checkCircle}
+                >
+
+                  <Text
+                    style={styles.checkText}
+                  >
+                    ✓
+                  </Text>
+
+                </View>
+
+              )}
 
             </TouchableOpacity>
 
           </View>
 
+          {/* COIN INFORMATION */}
+          <View style={styles.coinInfo}>
+
+            <Text style={styles.coinInfoIcon}>
+              🪙
+            </Text>
+
+            <View
+              style={styles.coinInfoContent}
+            >
+
+              <Text
+                style={styles.coinInfoTitle}
+              >
+                Gender Match costs 1 coin
+              </Text>
+
+              <Text
+                style={styles.coinInfoText}
+              >
+                Your current balance: {coinBalance} coins
+              </Text>
+
+            </View>
+
+          </View>
+
           {/* CONTINUE */}
           <TouchableOpacity
+            activeOpacity={0.85}
+            disabled={!selectedGender}
             style={[
               styles.continueButton,
 
-              !selectedGender && {
-                opacity: 0.5,
-              },
+              !selectedGender &&
+                styles.disabledButton,
             ]}
-            disabled={!selectedGender}
-            onPress={
-              continueGenderMatch
-            }
+            onPress={continueGenderMatch}
           >
 
-            <Text
-              style={styles.continueText}
-            >
-              Watch Ad & Continue
+            <Text style={styles.continueIcon}>
+              🪙
+            </Text>
+
+            <Text style={styles.continueText}>
+              Use 1 Coin & Continue
             </Text>
 
           </TouchableOpacity>
@@ -298,109 +488,403 @@ if (rewarded) {
 
       )}
 
+      {/* BOTTOM MESSAGE */}
+      {!showGenderSelect && (
+
+        <View style={styles.bottomHint}>
+
+          <Text style={styles.bottomHeart}>
+            ♥
+          </Text>
+
+          <Text style={styles.bottomText}>
+            Every conversation starts with hello.
+          </Text>
+
+        </View>
+
+      )}
+
     </SafeAreaView>
-
   );
-
 }
 
 const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#020617',
-    paddingHorizontal: 24,
-    paddingTop: 80,
+    backgroundColor: '#120814',
+    paddingHorizontal: 20,
+  },
+
+  header: {
+    height: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#1F111B',
+    borderWidth: 1,
+    borderColor: '#38202F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  backText: {
+    color: '#F8DCE7',
+    fontSize: 34,
+    fontWeight: '300',
+    lineHeight: 36,
+  },
+
+  headerHeart: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    backgroundColor: '#28121F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  headerHeartText: {
+    color: '#FF4F81',
+    fontSize: 25,
+  },
+
+  coinBadge: {
+    minWidth: 65,
+    height: 38,
+    paddingHorizontal: 10,
+    borderRadius: 19,
+    backgroundColor: '#28121F',
+    borderWidth: 1,
+    borderColor: '#4A293B',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  coinText: {
+    color: '#FFD76A',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  titleSection: {
+    marginTop: 25,
+    marginBottom: 28,
   },
 
   title: {
-    color: 'white',
-    fontSize: 38,
-    fontWeight: '800',
-    marginBottom: 50,
+    color: '#FFF7FB',
+    fontSize: 29,
+    fontWeight: '900',
     textAlign: 'center',
+    letterSpacing: -0.5,
+  },
+
+  subtitle: {
+    color: '#BFAFBA',
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 9,
   },
 
   randomCard: {
-    backgroundColor: '#00E0FF',
-    borderRadius: 30,
-    padding: 28,
-    marginBottom: 24,
+    minHeight: 125,
+    backgroundColor: '#FF4F81',
+    borderRadius: 25,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    shadowColor: '#FF4F81',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+
+  randomIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor:
+      'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  randomIconText: {
+    fontSize: 25,
+  },
+
+  cardContent: {
+    flex: 1,
+    marginLeft: 15,
+  },
+
+  randomTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+
+  randomText: {
+    color: '#FFE6EE',
+    fontSize: 13,
+    marginTop: 5,
+  },
+
+  freeBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 9,
+    backgroundColor:
+      'rgba(255,255,255,0.18)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+
+  freeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  whiteArrow: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '300',
   },
 
   genderCard: {
-    backgroundColor: '#081225',
-    borderRadius: 30,
-    padding: 28,
-    borderWidth: 2,
-    borderColor: '#00E0FF',
+    minHeight: 125,
+    backgroundColor: '#1B0F19',
+    borderRadius: 25,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#3A2331',
+  },
+
+  genderCardActive: {
+    borderColor: '#FF4F81',
+  },
+
+  genderIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2A1420',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  genderIconText: {
+    fontSize: 24,
   },
 
   cardTitle: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 10,
+    color: '#FFF7FB',
+    fontSize: 20,
+    fontWeight: '900',
   },
 
   cardText: {
-    color: '#D1D5DB',
-    fontSize: 15,
-    lineHeight: 22,
+    color: '#BFAFBA',
+    fontSize: 13,
+    marginTop: 5,
+  },
+
+  coinBadgeSmall: {
+    alignSelf: 'flex-start',
+    marginTop: 9,
+    backgroundColor: '#2A1420',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+
+  coinBadgeSmallText: {
+    color: '#FFD76A',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+
+  darkArrow: {
+    color: '#806D79',
+    fontSize: 34,
+    fontWeight: '300',
   },
 
   selectBox: {
-    marginTop: 40,
-    backgroundColor: '#081225',
-    borderRadius: 28,
-    padding: 22,
+    marginTop: 18,
+    backgroundColor: '#1B0F19',
+    borderRadius: 26,
+    padding: 19,
     borderWidth: 1,
-    borderColor: '#0F172A',
+    borderColor: '#3A2331',
+  },
+
+  selectHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
   },
 
   selectTitle: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 22,
-    textAlign: 'center',
+    color: '#FFF7FB',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+
+  selectSubtitle: {
+    color: '#8E7784',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  selectHeart: {
+    color: '#FF4F81',
+    fontSize: 28,
   },
 
   genderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 25,
+    gap: 10,
+    marginBottom: 15,
   },
 
-  genderButton: {
-    width: '48%',
-    backgroundColor: '#0F172A',
-    paddingVertical: 18,
-    borderRadius: 20,
+  genderChoice: {
+    flex: 1,
+    height: 72,
+    borderRadius: 18,
+    backgroundColor: '#261520',
+    borderWidth: 1,
+    borderColor: '#3B2533',
+    justifyContent: 'center',
     alignItems: 'center',
   },
 
-  activeGender: {
-    backgroundColor: '#00E0FF',
+  selectedGenderChoice: {
+    backgroundColor: '#FF4F81',
+    borderColor: '#FF4F81',
   },
 
-  genderText: {
-    color: 'white',
-    fontSize: 17,
-    fontWeight: '700',
+  choiceEmoji: {
+    fontSize: 23,
+    marginBottom: 3,
+  },
+
+  choiceText: {
+    color: '#DCCBD4',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  selectedChoiceText: {
+    color: '#FFFFFF',
+  },
+
+  checkCircle: {
+    position: 'absolute',
+    right: 7,
+    top: 7,
+    width: 19,
+    height: 19,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  checkText: {
+    color: '#FF4F81',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+
+  coinInfo: {
+    backgroundColor: '#24141F',
+    borderRadius: 17,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+
+  coinInfoIcon: {
+    fontSize: 22,
+    marginRight: 10,
+  },
+
+  coinInfoContent: {
+    flex: 1,
+  },
+
+  coinInfoTitle: {
+    color: '#F5DCE8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  coinInfoText: {
+    color: '#8E7784',
+    fontSize: 10,
+    marginTop: 3,
   },
 
   continueButton: {
-    backgroundColor: '#00E0FF',
-    paddingVertical: 18,
-    borderRadius: 22,
+    height: 55,
+    borderRadius: 18,
+    backgroundColor: '#FF4F81',
+    justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
+  },
+
+  disabledButton: {
+    opacity: 0.4,
+  },
+
+  continueIcon: {
+    fontSize: 16,
+    marginRight: 8,
   },
 
   continueText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  bottomHint: {
+    marginTop: 'auto',
+    marginBottom: 25,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+
+  bottomHeart: {
+    color: '#FF4F81',
+    fontSize: 17,
+    marginRight: 7,
+  },
+
+  bottomText: {
+    color: '#806D79',
+    fontSize: 12,
   },
 
 });

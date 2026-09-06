@@ -40,5 +40,10 @@ app-example
 
 # generated native folders
 /ios
-
+# Private Firebase files
 google-services.json
+android/app/google-services.json
+
+# Temporary files.temp/
+
+.temp/

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
   useEffect,
   useState,
@@ -18,11 +19,21 @@ import {
 
 import socket from '../socket';
 
+const PROFILE_KEY = '@talkrush_profile';
+
+type Profile = {
+  userId: string;
+  name: string;
+  age: string;
+  gender: string;
+};
+
 export default function SearchingScreen() {
 
   const router = useRouter();
 
   const {
+    userId,
     name,
     age,
     gender,
@@ -36,16 +47,20 @@ export default function SearchingScreen() {
   const [seconds, setSeconds] =
     useState(0);
 
+  const [starting, setStarting] =
+    useState(true);
+
+  // =========================
   // TIMER
+  // =========================
+
   useEffect(() => {
 
     const timer =
       setInterval(() => {
-
-        setSeconds((prev) =>
-          prev + 1
+        setSeconds(
+          (prev) => prev + 1
         );
-
       }, 1000);
 
     return () =>
@@ -53,7 +68,10 @@ export default function SearchingScreen() {
 
   }, []);
 
-  // DOT ANIMATION
+  // =========================
+  // ANIMATED DOTS
+  // =========================
+
   useEffect(() => {
 
     const dotInterval =
@@ -61,8 +79,9 @@ export default function SearchingScreen() {
 
         setDots((prev) => {
 
-          if (prev.length >= 3)
+          if (prev.length >= 3) {
             return '';
+          }
 
           return prev + '.';
 
@@ -75,158 +94,299 @@ export default function SearchingScreen() {
 
   }, []);
 
-  // SOCKET SEARCH
+  // =========================
+  // START SEARCH
+  // =========================
+
   useEffect(() => {
 
-    console.log(
-      'Searching Started'
-    );
+    let mounted = true;
 
-    socket.off('matched');
-    socket.off('searching');
-    socket.off('disconnected');
+    const startSearching =
+      async () => {
 
-    // START SEARCH
-    socket.emit(
-      'find-stranger',
-      {
-        name,
-        age,
-        gender,
-        genderFilter:
-          genderFilter || 'Random',
-      }
-    );
+        try {
 
-    // WAITING
-    socket.on(
-      'searching',
-      () => {
+          let finalUserId =
+            typeof userId === 'string'
+              ? userId
+              : '';
 
-        console.log(
-          'Waiting for Stranger'
-        );
+          let finalName =
+            typeof name === 'string'
+              ? name
+              : '';
 
-      }
-    );
+          let finalAge =
+            typeof age === 'string'
+              ? age
+              : '';
 
-    // MATCHED
-    socket.on(
-      'matched',
-      (partnerData) => {
+          let finalGender =
+            typeof gender === 'string'
+              ? gender
+              : '';
 
-        console.log(
-          'Matched Successfully'
-        );
+          // =========================
+          // FALLBACK TO SAVED PROFILE
+          // =========================
 
-        router.replace({
+          if (
+            !finalUserId ||
+            !finalName ||
+            !finalAge ||
+            !finalGender
+          ) {
 
-          pathname: '/chat',
+            const saved =
+              await AsyncStorage.getItem(
+                PROFILE_KEY
+              );
 
-          params: {
+            if (saved) {
 
-            skipCount,
+              const profile: Profile =
+                JSON.parse(saved);
 
-            myName: name,
-            myAge: age,
-            myGender: gender,
+              finalUserId =
+                finalUserId ||
+                profile.userId ||
+                '';
 
-            genderFilter:
-              genderFilter ||
-              'Random',
+              finalName =
+                finalName ||
+                profile.name ||
+                '';
 
-            strangerName:
-              partnerData.name,
+              finalAge =
+                finalAge ||
+                profile.age ||
+                '';
 
-            strangerAge:
-              partnerData.age,
+              finalGender =
+                finalGender ||
+                profile.gender ||
+                '';
 
-            strangerGender:
-              partnerData.gender,
+            }
 
-          },
+          }
 
-        });
+          if (!mounted) {
+            return;
+          }
 
-      }
-    );
+          setStarting(false);
+
+          console.log(
+            'Searching Started:',
+            finalUserId
+          );
+
+          // =========================
+          // CLEAR OLD LISTENERS
+          // =========================
+
+          socket.off('matched');
+          socket.off('searching');
+          socket.off('disconnected');
+
+          // =========================
+          // FIND STRANGER
+          // =========================
+
+          socket.emit(
+            'find-stranger',
+            {
+              userId:
+                finalUserId,
+
+              name:
+                finalName,
+
+              age:
+                finalAge,
+
+              gender:
+                finalGender,
+
+              genderFilter:
+                typeof genderFilter ===
+                'string'
+                  ? genderFilter
+                  : 'Random',
+            }
+          );
+
+          // =========================
+          // SEARCHING
+          // =========================
+
+          socket.on(
+            'searching',
+            () => {
+
+              console.log(
+                'Waiting for Stranger'
+              );
+
+            }
+          );
+
+          // =========================
+          // MATCHED
+          // =========================
+
+          socket.on(
+            'matched',
+            (partnerData) => {
+
+              console.log(
+                'Matched Successfully:',
+                partnerData
+              );
+
+              router.replace({
+                pathname: '/chat',
+
+                params: {
+
+                  skipCount:
+                    typeof skipCount ===
+                    'string'
+                      ? skipCount
+                      : '0',
+
+                  myUserId:
+                    finalUserId,
+
+                  myName:
+                    finalName,
+
+                  myAge:
+                    finalAge,
+
+                  myGender:
+                    finalGender,
+
+                  genderFilter:
+                    typeof genderFilter ===
+                    'string'
+                      ? genderFilter
+                      : 'Random',
+
+                  strangerUserId:
+                    partnerData?.userId ||
+                    '',
+
+                  strangerName:
+                    partnerData?.name ||
+                    'TalkRush User',
+
+                  strangerAge:
+                    String(
+                      partnerData?.age ||
+                      ''
+                    ),
+
+                  strangerGender:
+                    partnerData?.gender ||
+                    '',
+                },
+              });
+
+            }
+          );
+
+        } catch (error) {
+
+          console.log(
+            'Searching error:',
+            error
+          );
+
+          if (mounted) {
+            setStarting(false);
+          }
+
+        }
+
+      };
+
+    startSearching();
 
     return () => {
 
+      mounted = false;
+
       socket.off('matched');
-
       socket.off('searching');
-
       socket.off('disconnected');
 
     };
 
   }, []);
 
-  // CANCEL SEARCH
+  // =========================
+  // CANCEL
+  // =========================
+
   const cancelSearch = () => {
 
-    socket.emit('disconnect-partner');
+    socket.emit(
+      'disconnect-partner'
+    );
 
-  router.replace({
-    pathname: '/match',
-    params: {
-      name,
-      age,
-      gender,
-    },
-  });
+    socket.off('matched');
+    socket.off('searching');
+    socket.off('disconnected');
 
-};
+    router.replace('/home');
+
+  };
 
   return (
 
     <View style={styles.container}>
 
-      {/* OUTER GLOW */}
       <View style={styles.outerCircle}>
 
-        {/* INNER CIRCLE */}
         <View style={styles.circle}>
 
           <ActivityIndicator
             size="large"
-            color="#00E0FF"
+            color="#FF4F81"
           />
 
         </View>
 
       </View>
 
-      {/* TITLE */}
       <Text style={styles.title}>
         Finding Stranger{dots}
       </Text>
 
-      {/* SUBTITLE */}
       <Text style={styles.subTitle}>
         Matching you anonymously
       </Text>
 
-      {/* HINT */}
       <Text style={styles.hint}>
-        Please wait while we find someone
+        {starting
+          ? 'Starting search...'
+          : 'Please wait while we find someone'}
       </Text>
 
-      {/* TIMER */}
       <Text style={styles.timer}>
         Searching for {seconds}s
       </Text>
 
-      {/* CANCEL BUTTON */}
       <TouchableOpacity
         style={styles.cancelButton}
         onPress={cancelSearch}
+        activeOpacity={0.85}
       >
 
-        <Text
-          style={styles.cancelText}
-        >
+        <Text style={styles.cancelText}>
           Cancel Search
         </Text>
 
@@ -235,14 +395,13 @@ export default function SearchingScreen() {
     </View>
 
   );
-
 }
 
 const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#12070D',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -254,7 +413,7 @@ const styles = StyleSheet.create({
     height: 150,
     borderRadius: 999,
     backgroundColor:
-      'rgba(0,224,255,0.08)',
+      'rgba(255,79,129,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 40,
@@ -264,46 +423,50 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
     borderRadius: 999,
-    backgroundColor: '#081225',
+    backgroundColor: '#1B0C14',
+    borderWidth: 1,
+    borderColor: '#4A1D30',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   title: {
-    color: '#00E0FF',
+    color: '#FF4F81',
     fontSize: 30,
     fontWeight: '800',
     marginBottom: 12,
   },
 
   subTitle: {
-    color: '#94A3B8',
+    color: '#A995A1',
     fontSize: 16,
     textAlign: 'center',
   },
 
   hint: {
-    color: '#475569',
+    color: '#806D79',
     fontSize: 13,
     marginTop: 10,
   },
 
   timer: {
-    color: '#64748B',
+    color: '#A995A1',
     fontSize: 14,
     marginTop: 18,
   },
 
   cancelButton: {
     marginTop: 45,
-    backgroundColor: '#172033',
+    backgroundColor: '#29101B',
+    borderWidth: 1,
+    borderColor: '#4A1D30',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 20,
   },
 
   cancelText: {
-    color: 'white',
+    color: '#FFF7FB',
     fontSize: 15,
     fontWeight: '700',
   },

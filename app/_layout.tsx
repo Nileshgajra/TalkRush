@@ -22,6 +22,7 @@ export default function RootLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="friend" />
       <Stack.Screen name="searching" />
       <Stack.Screen name="match" />
       <Stack.Screen name="modal" />
