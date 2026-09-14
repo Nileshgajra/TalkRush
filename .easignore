@@ -1,0 +1,7 @@
+node_modules/
+.git/
+.expo/
+.temp/
+backend/node_modules/
+backend/.expo/
+eas-inspect/
