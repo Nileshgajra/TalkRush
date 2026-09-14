@@ -42,7 +42,7 @@ import socket from '../socket';
 
 const rewarded =
   RewardedAd.createForAdRequest(
-    'ca-app-pub-6592726204956042/9182662547'
+    'ca-app-pub-3940256099942544/5224354917'
   );
 
 
@@ -84,7 +84,23 @@ export default function ChatScreen() {
 
 
   // =========================
-  // STRANGER
+  // FRIEND MODE
+  // =========================
+
+  const isFriendChat =
+    String(
+      params.isFriend || ''
+    ) === 'true';
+
+
+  const friendId =
+    String(
+      params.strangerUserId || ''
+    );
+
+
+  // =========================
+  // STRANGER / FRIEND
   // =========================
 
   const [stranger, setStranger] =
@@ -113,7 +129,9 @@ export default function ChatScreen() {
 
   const [myUserId, setMyUserId] =
     useState(
-      String(params.myUserId || '')
+      String(
+        params.myUserId || ''
+      )
     );
 
 
@@ -134,7 +152,11 @@ export default function ChatScreen() {
   // =========================
 
   const [status, setStatus] =
-    useState('Online');
+    useState(
+      isFriendChat
+        ? 'Checking...'
+        : 'Online'
+    );
 
 
   const [typing, setTyping] =
@@ -175,12 +197,49 @@ export default function ChatScreen() {
       'sending' |
       'sent' |
       'friends'
-    >('none');
+    >(
+      isFriendChat
+        ? 'friends'
+        : 'none'
+    );
 
 
   // =========================
+  // ACTION MODAL
+  // =========================
+
+  const [showActionModal, setShowActionModal] =
+    useState(false);
+
+
+  // =========================
+  // REPORT MODAL
+  // =========================
+
+  const [showReportModal, setShowReportModal] =
+    useState(false);
+
+
+  const [selectedReportReason, setSelectedReportReason] =
+    useState('');
+
+
+  // =========================
+  // REPORT REASONS
+  // =========================
+
+  const reportReasons = [
+    'Harassment / Abuse',
+    'Spam',
+    'Inappropriate content',
+    'Fake profile',
+    'Other',
+  ];
+
+
+  // ==================================================
   // LOAD PROFILE
-  // =========================
+  // ==================================================
 
   useEffect(() => {
 
@@ -208,20 +267,13 @@ export default function ChatScreen() {
 
 
           if (
-            profile.userId &&
-            !myUserId
+            profile.userId
           ) {
 
             setMyUserId(
               profile.userId
             );
 
-          }
-
-
-          // Register again to make sure
-          // backend knows this socket user
-          if (profile.userId) {
 
             socket.emit(
               'register-user',
@@ -259,9 +311,9 @@ export default function ChatScreen() {
   }, []);
 
 
-  // =========================
+  // ==================================================
   // REWARDED AD
-  // =========================
+  // ==================================================
 
   useEffect(() => {
 
@@ -292,7 +344,6 @@ export default function ChatScreen() {
 
           isLeavingRef.current =
             false;
-
 
           rewarded.load();
 
@@ -330,16 +381,104 @@ export default function ChatScreen() {
 
 
   // ==================================================
+  // LOAD FRIEND HISTORY
+  // ==================================================
+
+  useEffect(() => {
+
+    if (
+      !isFriendChat ||
+      !friendId
+    ) {
+      return;
+    }
+
+
+    const loadHistory =
+      () => {
+
+        const userId =
+          myUserId ||
+          String(
+            params.myUserId || ''
+          );
+
+
+        if (!userId) {
+          return;
+        }
+
+
+        socket.emit(
+          'get-chat-history',
+          {
+            userId,
+
+            friendId,
+          }
+        );
+
+
+        socket.emit(
+          'get-user-status',
+          {
+            userId:
+              friendId,
+          }
+        );
+
+      };
+
+
+    loadHistory();
+
+  }, [
+    isFriendChat,
+    friendId,
+    myUserId,
+  ]);
+
+
+  // ==================================================
   // SOCKET EVENTS
   // ==================================================
 
   useEffect(() => {
 
+    // Remove old listeners
     socket.off('matched');
     socket.off('message');
     socket.off('typing');
     socket.off('seen');
     socket.off('disconnected');
+
+    socket.off(
+      'friend-message'
+    );
+
+    socket.off(
+      'friend-message-sent'
+    );
+
+    socket.off(
+      'friend-message-error'
+    );
+
+    socket.off(
+      'chat-history'
+    );
+
+    socket.off(
+      'friend-message-seen'
+    );
+
+    socket.off(
+      'friend-typing'
+    );
+
+    socket.off(
+      'user-status'
+    );
 
     socket.off(
       'friend-request-result'
@@ -353,10 +492,22 @@ export default function ChatScreen() {
       'new-friend-request'
     );
 
+    socket.off(
+      'friend-removed'
+    );
 
-    // =========================
+    socket.off(
+      'block-result'
+    );
+
+    socket.off(
+      'report-result'
+    );
+
+
+    // ==================================================
     // MATCHED
-    // =========================
+    // ==================================================
 
     socket.on(
       'matched',
@@ -376,7 +527,9 @@ export default function ChatScreen() {
           false;
 
 
-        setStatus('Online');
+        setStatus(
+          'Online'
+        );
 
         setTyping(false);
 
@@ -414,17 +567,24 @@ export default function ChatScreen() {
     );
 
 
-    // =========================
-    // MESSAGE
-    // =========================
+    // ==================================================
+    // STRANGER MESSAGE
+    // ==================================================
 
     socket.on(
       'message',
       (text) => {
 
+        if (isFriendChat) {
+          return;
+        }
+
+
         setTyping(false);
 
-        socket.emit('seen');
+        socket.emit(
+          'seen'
+        );
 
 
         setMessages(
@@ -463,13 +623,333 @@ export default function ChatScreen() {
     );
 
 
-    // =========================
-    // TYPING
-    // =========================
+    // ==================================================
+    // FRIEND MESSAGE
+    // ==================================================
 
     socket.on(
-      'typing',
-      () => {
+      'friend-message',
+      (data) => {
+
+        if (
+          !isFriendChat ||
+          data?.senderId !==
+            friendId
+        ) {
+          return;
+        }
+
+
+        setTyping(false);
+
+
+        setMessages(
+          (prev) => {
+
+            const exists =
+              prev.some(
+                (item) =>
+                  item.id ===
+                  data.id
+              );
+
+
+            if (exists) {
+              return prev;
+            }
+
+
+            return [
+              ...prev,
+
+              {
+                id:
+                  data.id,
+
+                text:
+                  data.text,
+
+                sender:
+                  'other',
+
+                senderId:
+                  data.senderId,
+
+                receiverId:
+                  data.receiverId,
+
+                seen:
+                  data.seen,
+
+                createdAt:
+                  data.createdAt,
+              },
+            ];
+
+          }
+        );
+
+
+        socket.emit(
+          'friend-message-seen',
+          {
+            messageId:
+              data.id,
+
+            userId:
+              myUserId ||
+              String(
+                params.myUserId ||
+                ''
+              ),
+          }
+        );
+
+
+        setTimeout(
+          () => {
+
+            flatListRef.current?.scrollToEnd(
+              {
+                animated: true,
+              }
+            );
+
+          },
+          100
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // FRIEND MESSAGE SENT
+    // ==================================================
+
+    socket.on(
+      'friend-message-sent',
+      (data) => {
+
+        if (
+          !isFriendChat
+        ) {
+          return;
+        }
+
+
+        setMessages(
+          (prev) => {
+
+            const exists =
+              prev.some(
+                (item) =>
+                  item.id ===
+                  data.id
+              );
+
+
+            if (exists) {
+              return prev;
+            }
+
+
+            return [
+              ...prev,
+
+              {
+                id:
+                  data.id,
+
+                text:
+                  data.text,
+
+                sender:
+                  'me',
+
+                senderId:
+                  data.senderId,
+
+                receiverId:
+                  data.receiverId,
+
+                seen:
+                  data.seen,
+
+                createdAt:
+                  data.createdAt,
+              },
+            ];
+
+          }
+        );
+
+
+        setTimeout(
+          () => {
+
+            flatListRef.current?.scrollToEnd(
+              {
+                animated: true,
+              }
+            );
+
+          },
+          100
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // FRIEND MESSAGE ERROR
+    // ==================================================
+
+    socket.on(
+      'friend-message-error',
+      (data) => {
+
+        Alert.alert(
+          'Message',
+          data?.message ||
+            'Could not send message.'
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // CHAT HISTORY
+    // ==================================================
+
+    socket.on(
+      'chat-history',
+      (data) => {
+
+        if (
+          !isFriendChat ||
+          data?.friendId !==
+            friendId
+        ) {
+          return;
+        }
+
+
+        if (
+          !data?.success
+        ) {
+          return;
+        }
+
+
+        const formatted =
+          (
+            data.messages ||
+            []
+          ).map(
+            (item: any) => ({
+
+              id:
+                item.id,
+
+              text:
+                item.text,
+
+              sender:
+                item.senderId ===
+                  (
+                    myUserId ||
+                    String(
+                      params.myUserId ||
+                      ''
+                    )
+                  )
+                  ? 'me'
+                  : 'other',
+
+              senderId:
+                item.senderId,
+
+              receiverId:
+                item.receiverId,
+
+              seen:
+                item.seen,
+
+              createdAt:
+                item.createdAt,
+
+            })
+          );
+
+
+        setMessages(
+          formatted
+        );
+
+
+        setTimeout(
+          () => {
+
+            flatListRef.current?.scrollToEnd(
+              {
+                animated: false,
+              }
+            );
+
+          },
+          200
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // FRIEND MESSAGE SEEN
+    // ==================================================
+
+    socket.on(
+      'friend-message-seen',
+      (data) => {
+
+        setMessages(
+          (prev) =>
+            prev.map(
+              (item) =>
+                item.id ===
+                  data?.messageId
+                  ? {
+                      ...item,
+                      seen: true,
+                    }
+                  : item
+            )
+        );
+
+        setSeen(true);
+
+      }
+    );
+
+
+    // ==================================================
+    // FRIEND TYPING
+    // ==================================================
+
+    socket.on(
+      'friend-typing',
+      (data) => {
+
+        if (
+          data?.senderId !==
+          friendId
+        ) {
+          return;
+        }
+
 
         setTyping(true);
 
@@ -487,13 +967,73 @@ export default function ChatScreen() {
     );
 
 
-    // =========================
-    // SEEN
-    // =========================
+    // ==================================================
+    // USER STATUS
+    // ==================================================
+
+    socket.on(
+      'user-status',
+      (data) => {
+
+        if (
+          data?.userId !==
+          friendId
+        ) {
+          return;
+        }
+
+
+        setStatus(
+          data.online
+            ? 'Online'
+            : 'Offline'
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // TYPING - STRANGER
+    // ==================================================
+
+    socket.on(
+      'typing',
+      () => {
+
+        if (isFriendChat) {
+          return;
+        }
+
+
+        setTyping(true);
+
+
+        setTimeout(
+          () => {
+
+            setTyping(false);
+
+          },
+          1200
+        );
+
+      }
+    );
+
+
+    // ==================================================
+    // SEEN - STRANGER
+    // ==================================================
 
     socket.on(
       'seen',
       () => {
+
+        if (isFriendChat) {
+          return;
+        }
+
 
         setSeen(true);
 
@@ -501,13 +1041,18 @@ export default function ChatScreen() {
     );
 
 
-    // =========================
-    // DISCONNECTED
-    // =========================
+    // ==================================================
+    // PARTNER DISCONNECTED
+    // ==================================================
 
     socket.on(
       'disconnected',
       () => {
+
+        if (isFriendChat) {
+          return;
+        }
+
 
         if (
           isLeavingRef.current
@@ -531,75 +1076,33 @@ export default function ChatScreen() {
         );
 
 
-        setStatus(
-          'Searching'
+        clearTimeout(
+          disconnectTimer.current
         );
 
+
+        setStatus(
+          'Partner left'
+        );
 
         setTyping(false);
 
         setSeen(false);
 
-        setMessages([]);
 
+        setStranger(
+          (prev: any) => ({
+            ...prev,
 
-        setStranger({
-
-          userId: '',
-
-          name:
-            'Searching...',
-
-          age: '',
-
-          gender: '',
-
-        });
+            name:
+              'Partner left the chat',
+          })
+        );
 
 
         setFriendStatus(
           'none'
         );
-
-
-        disconnectTimer.current =
-          setTimeout(
-            () => {
-
-              router.replace({
-
-                pathname:
-                  '/searching',
-
-                params: {
-
-                  userId:
-                    myUserId,
-
-                  name:
-                    params.myName,
-
-                  age:
-                    params.myAge,
-
-                  gender:
-                    params.myGender,
-
-                  genderFilter:
-                    params.genderFilter,
-
-                  skipCount:
-                    String(
-                      skipCount
-                    ),
-
-                },
-
-              });
-
-            },
-            1500
-          );
 
       }
     );
@@ -623,7 +1126,6 @@ export default function ChatScreen() {
           result?.success
         ) {
 
-          // Request sent
           if (
             result.message ===
             'Friend request sent.'
@@ -641,8 +1143,6 @@ export default function ChatScreen() {
 
           }
 
-
-          // Accepted
           else if (
             result.message ===
             'Friend request accepted.'
@@ -660,8 +1160,6 @@ export default function ChatScreen() {
 
           }
 
-
-          // Rejected
           else if (
             result.message ===
             'Friend request rejected.'
@@ -674,7 +1172,9 @@ export default function ChatScreen() {
 
           }
 
-        } else {
+        }
+
+        else {
 
           setFriendStatus(
             'none'
@@ -728,15 +1228,9 @@ export default function ChatScreen() {
       'new-friend-request',
       (request) => {
 
-        console.log(
-          'New Friend Request:',
-          request
-        );
-
-
         Alert.alert(
           'New Friend Request ❤️',
-          `${stranger.name || 'Someone'} wants to be your friend.`,
+          'Someone wants to be your friend.',
           [
             {
               text:
@@ -784,6 +1278,149 @@ export default function ChatScreen() {
     );
 
 
+    // ==================================================
+    // FRIEND REMOVED
+    // ==================================================
+
+    socket.on(
+  'friend-removed',
+  (data) => {
+
+    if (
+      !isFriendChat ||
+      data?.friendId !==
+        friendId
+    ) {
+      return;
+    }
+
+
+    setFriendStatus(
+      'none'
+    );
+
+
+    Alert.alert(
+      'Friend Removed',
+      'This person is no longer your friend.'
+    );
+
+  }
+);
+
+
+    // ==================================================
+    // BLOCK RESULT
+    // ==================================================
+
+    socket.on(
+      'block-result',
+      (data) => {
+
+        if (
+          data?.success
+        ) {
+
+          setShowActionModal(
+            false
+          );
+
+
+          Alert.alert(
+            'User Blocked',
+            'This user has been blocked.',
+            [
+              {
+                text:
+                  'OK',
+
+                onPress: () => {
+
+                  if (
+                    isFriendChat
+                  ) {
+
+                    router.replace(
+  '/friend' as any
+);
+
+                  }
+
+                  else {
+
+                    router.replace(
+                      '/home'
+                    );
+
+                  }
+
+                },
+
+              },
+
+            ]
+          );
+
+        }
+
+        else if (
+          data?.message
+        ) {
+
+          Alert.alert(
+            'Block',
+            data.message
+          );
+
+        }
+
+      }
+    );
+
+
+    // ==================================================
+    // REPORT RESULT
+    // ==================================================
+
+    socket.on(
+      'report-result',
+      (data) => {
+
+        if (
+          data?.success
+        ) {
+
+          setShowReportModal(
+            false
+          );
+
+          setSelectedReportReason(
+            ''
+          );
+
+
+          Alert.alert(
+            'Report Submitted',
+            'Thank you. Your report has been recorded.'
+          );
+
+        }
+
+        else if (
+          data?.message
+        ) {
+
+          Alert.alert(
+            'Report',
+            data.message
+          );
+
+        }
+
+      }
+    );
+
+
     return () => {
 
       socket.off('matched');
@@ -797,6 +1434,34 @@ export default function ChatScreen() {
       socket.off('disconnected');
 
       socket.off(
+        'friend-message'
+      );
+
+      socket.off(
+        'friend-message-sent'
+      );
+
+      socket.off(
+        'friend-message-error'
+      );
+
+      socket.off(
+        'chat-history'
+      );
+
+      socket.off(
+        'friend-message-seen'
+      );
+
+      socket.off(
+        'friend-typing'
+      );
+
+      socket.off(
+        'user-status'
+      );
+
+      socket.off(
         'friend-request-result'
       );
 
@@ -808,9 +1473,26 @@ export default function ChatScreen() {
         'new-friend-request'
       );
 
+      socket.off(
+        'friend-removed'
+      );
+
+      socket.off(
+        'block-result'
+      );
+
+      socket.off(
+        'report-result'
+      );
+
     };
 
-  }, [myUserId, stranger.name, skipCount]);
+  }, [
+    myUserId,
+    stranger.name,
+    friendId,
+    isFriendChat,
+  ]);
 
 
   // ==================================================
@@ -839,7 +1521,7 @@ export default function ChatScreen() {
 
         Alert.alert(
           'Please Wait',
-          'Your profile is still loading. Please try again.'
+          'Your profile is still loading.'
         );
 
         return;
@@ -927,9 +1609,48 @@ export default function ChatScreen() {
   const sendMessage =
     () => {
 
-      if (
-        !message.trim()
-      ) {
+      const cleanMessage =
+        message.trim();
+
+
+      if (!cleanMessage) {
+        return;
+      }
+
+
+      const senderId =
+        myUserId ||
+        String(
+          params.myUserId || ''
+        );
+
+
+      const receiverId =
+        stranger.userId ||
+        String(
+          params.strangerUserId ||
+          ''
+        );
+
+
+      if (!senderId) {
+
+        Alert.alert(
+          'Please Wait',
+          'Your profile is still loading.'
+        );
+
+        return;
+
+      }
+
+
+      if (!receiverId) {
+
+        Alert.alert(
+          'Unavailable',
+          'This chat is no longer available.'
+        );
 
         return;
 
@@ -939,28 +1660,56 @@ export default function ChatScreen() {
       setSeen(false);
 
 
-      socket.emit(
-        'message',
-        message
-      );
+      // =========================
+      // FRIEND MESSAGE
+      // =========================
 
+      if (isFriendChat) {
 
-      setMessages(
-        (prev) => [
-          ...prev,
-
+        socket.emit(
+          'friend-message',
           {
-            id:
-              Date.now().toString(),
+            senderId,
+
+            receiverId,
 
             text:
-              message,
+              cleanMessage,
+          }
+        );
 
-            sender:
-              'me',
-          },
-        ]
-      );
+      }
+
+      // =========================
+      // STRANGER MESSAGE
+      // =========================
+
+      else {
+
+        socket.emit(
+          'message',
+          cleanMessage
+        );
+
+
+        setMessages(
+          (prev) => [
+            ...prev,
+
+            {
+              id:
+                Date.now().toString(),
+
+              text:
+                cleanMessage,
+
+              sender:
+                'me',
+            },
+          ]
+        );
+
+      }
 
 
       setMessage('');
@@ -983,11 +1732,302 @@ export default function ChatScreen() {
 
 
   // ==================================================
-  // NEXT USER
+  // TYPING
+  // ==================================================
+
+  const handleTyping =
+    (text: string) => {
+
+      setMessage(
+        text
+      );
+
+
+      const senderId =
+        myUserId ||
+        String(
+          params.myUserId || ''
+        );
+
+
+      const receiverId =
+        stranger.userId ||
+        String(
+          params.strangerUserId ||
+          ''
+        );
+
+
+      if (!senderId || !receiverId) {
+        return;
+      }
+
+
+      if (isFriendChat) {
+
+        socket.emit(
+          'friend-typing',
+          {
+            senderId,
+
+            receiverId,
+          }
+        );
+
+      }
+
+      else {
+
+        socket.emit(
+          'typing'
+        );
+
+      }
+
+    };
+
+
+  // ==================================================
+  // REMOVE FRIEND
+  // ==================================================
+
+  const removeFriend =
+    () => {
+
+      const userId =
+        myUserId ||
+        String(
+          params.myUserId || ''
+        );
+
+
+      const friendIdToRemove =
+        stranger.userId ||
+        String(
+          params.strangerUserId ||
+          ''
+        );
+
+
+      if (
+        !userId ||
+        !friendIdToRemove
+      ) {
+        return;
+      }
+
+
+      Alert.alert(
+        'Remove Friend',
+        `Remove ${stranger.name || 'this user'} from your friends? Your chat history will NOT be deleted.`,
+        [
+          {
+            text:
+              'Cancel',
+
+            style:
+              'cancel',
+          },
+
+          {
+            text:
+              'Remove',
+
+            style:
+              'destructive',
+
+            onPress: () => {
+
+              socket.emit(
+                'remove-friend',
+                {
+                  userId,
+
+                  friendId:
+                    friendIdToRemove,
+                }
+              );
+
+              setFriendStatus(
+                'none'
+              );
+
+            },
+
+          },
+
+        ]
+      );
+
+    };
+
+
+  // ==================================================
+  // BLOCK USER
+  // ==================================================
+
+  const blockUser =
+    () => {
+
+      const userId =
+        myUserId ||
+        String(
+          params.myUserId || ''
+        );
+
+
+      const blockedUserId =
+        stranger.userId ||
+        String(
+          params.strangerUserId ||
+          ''
+        );
+
+
+      if (
+        !userId ||
+        !blockedUserId
+      ) {
+        return;
+      }
+
+
+      Alert.alert(
+        'Block User',
+        `Block ${stranger.name || 'this user'}? They will not be able to match with you or send you friend requests.`,
+        [
+          {
+            text:
+              'Cancel',
+
+            style:
+              'cancel',
+          },
+
+          {
+            text:
+              'Block',
+
+            style:
+              'destructive',
+
+            onPress: () => {
+
+              socket.emit(
+                'block-user',
+                {
+                  userId,
+
+                  blockedUserId,
+                }
+              );
+
+            },
+
+          },
+
+        ]
+      );
+
+    };
+
+
+  // ==================================================
+  // REPORT USER
+  // ==================================================
+
+  const openReport =
+    () => {
+
+      setShowActionModal(
+        false
+      );
+
+      setShowReportModal(
+        true
+      );
+
+    };
+
+
+  const submitReport =
+    () => {
+
+      const reporterId =
+        myUserId ||
+        String(
+          params.myUserId || ''
+        );
+
+
+      const reportedUserId =
+        stranger.userId ||
+        String(
+          params.strangerUserId ||
+          ''
+        );
+
+
+      if (
+        !reporterId ||
+        !reportedUserId
+      ) {
+
+        return;
+
+      }
+
+
+      if (
+        !selectedReportReason
+      ) {
+
+        Alert.alert(
+          'Select Reason',
+          'Please select a reason for the report.'
+        );
+
+        return;
+
+      }
+
+
+      socket.emit(
+        'report-user',
+        {
+          reporterId,
+
+          reportedUserId,
+
+          reason:
+            selectedReportReason,
+        }
+      );
+
+    };
+
+
+  // ==================================================
+  // NEXT / LEAVE
   // ==================================================
 
   const nextUser =
     () => {
+
+      // =========================
+      // FRIEND CHAT
+      // =========================
+
+      if (isFriendChat) {
+
+        router.replace(
+  '/friend' as any
+);
+
+        return;
+
+      }
+
 
       console.log(
         'Skip Count:',
@@ -1024,9 +2064,12 @@ export default function ChatScreen() {
         true;
 
 
+      const nextSkipCount =
+        skipCount + 1;
+
+
       setSkipCount(
-        (prev) =>
-          prev + 1
+        nextSkipCount
       );
 
 
@@ -1035,16 +2078,15 @@ export default function ChatScreen() {
       );
 
 
-      socket.off('matched');
-
-      socket.off('message');
-
-      socket.off('typing');
-
-      socket.off('seen');
-
-      socket.off('disconnected');
-
+      // IMPORTANT:
+      // We do NOT remove the
+      // partner's listener here.
+      //
+      // Backend sends "disconnected"
+      // to the partner only.
+      //
+      // Current user immediately
+      // goes to searching.
 
       setMessages([]);
 
@@ -1106,7 +2148,7 @@ export default function ChatScreen() {
 
           skipCount:
             String(
-              skipCount + 1
+              nextSkipCount
             ),
 
         },
@@ -1143,7 +2185,27 @@ export default function ChatScreen() {
       }
 
 
-      return '#EF4444';
+      if (
+        status ===
+        'Offline'
+      ) {
+
+        return '#64748B';
+
+      }
+
+
+      if (
+        status ===
+        'Partner left'
+      ) {
+
+        return '#EF4444';
+
+      }
+
+
+      return '#F59E0B';
 
     };
 
@@ -1300,57 +2362,124 @@ export default function ChatScreen() {
 
 
           {/* =========================
-              ADD FRIEND
+              FRIEND / ACTIONS
           ========================= */}
 
-          {status ===
-            'Online' &&
-            stranger.userId && (
+          {stranger.userId && (
 
-            <TouchableOpacity
-              style={[
-                styles.friendButton,
-
-                friendStatus ===
-                  'friends' &&
-                  styles.friendButtonDone,
-
-                friendStatus ===
-                  'sent' &&
-                  styles.friendButtonSent,
-              ]}
-
-              onPress={
-                sendFriendRequest
-              }
-
-              disabled={
-                friendStatus ===
-                  'sending' ||
-                friendStatus ===
-                  'sent' ||
-                friendStatus ===
-                  'friends'
-              }
-
-              activeOpacity={
-                0.85
+            <View
+              style={
+                styles.actionRow
               }
             >
 
-              <Text
+              {!isFriendChat && (
+                <TouchableOpacity
+                  style={[
+                    styles.friendButton,
+
+                    friendStatus ===
+                      'friends' &&
+                      styles.friendButtonDone,
+
+                    friendStatus ===
+                      'sent' &&
+                      styles.friendButtonSent,
+                  ]}
+
+                  onPress={
+                    sendFriendRequest
+                  }
+
+                  disabled={
+                    friendStatus ===
+                      'sending' ||
+                    friendStatus ===
+                      'sent' ||
+                    friendStatus ===
+                      'friends'
+                  }
+
+                  activeOpacity={
+                    0.85
+                  }
+                >
+
+                  <Text
+                    style={
+                      styles.friendButtonText
+                    }
+                  >
+                    {getFriendButtonText()}
+                  </Text>
+
+                </TouchableOpacity>
+              )}
+
+
+              <TouchableOpacity
                 style={
-                  styles.friendButtonText
+                  styles.moreButton
+                }
+
+                onPress={() =>
+                  setShowActionModal(
+                    true
+                  )
                 }
               >
-                {getFriendButtonText()}
-              </Text>
 
-            </TouchableOpacity>
+                <Text
+                  style={
+                    styles.moreButtonText
+                  }
+                >
+                  ⋮
+                </Text>
+
+              </TouchableOpacity>
+
+            </View>
 
           )}
 
         </View>
+
+
+        {/* =========================
+            PARTNER LEFT
+        ========================= */}
+
+        {!isFriendChat &&
+          status ===
+            'Partner left' && (
+
+          <View
+            style={
+              styles.leftBanner
+            }
+          >
+
+            <Text
+              style={
+                styles.leftTitle
+              }
+            >
+              Partner left the chat
+            </Text>
+
+
+            <Text
+              style={
+                styles.leftText
+              }
+            >
+              Press Next when you're ready to meet someone new.
+            </Text>
+
+          </View>
+
+        )}
 
 
         {/* =========================
@@ -1368,7 +2497,9 @@ export default function ChatScreen() {
 
           keyExtractor={
             (item) =>
-              item.id
+              String(
+                item.id
+              )
           }
 
           showsVerticalScrollIndicator={
@@ -1433,7 +2564,9 @@ export default function ChatScreen() {
                 styles.typingText
               }
             >
-              Stranger typing...
+              {isFriendChat
+                ? `${stranger.name || 'Friend'} is typing...`
+                : 'Stranger typing...'}
             </Text>
 
           </View>
@@ -1469,7 +2602,7 @@ export default function ChatScreen() {
         >
 
           <BannerAd
-            unitId="ca-app-pub-6592726204956042/5797951306"
+            unitId="ca-app-pub-3940256099942544/9214589741"
 
             size={
               BannerAdSize.BANNER
@@ -1519,7 +2652,9 @@ export default function ChatScreen() {
                 styles.nextText
               }
             >
-              Next
+              {isFriendChat
+                ? 'Back'
+                : 'Next'}
             </Text>
 
           </TouchableOpacity>
@@ -1531,20 +2666,14 @@ export default function ChatScreen() {
             }
 
             onChangeText={
-              (text) => {
-
-                setMessage(
-                  text
-                );
-
-                socket.emit(
-                  'typing'
-                );
-
-              }
+              handleTyping
             }
 
-            placeholder="Type message..."
+            placeholder={
+              isFriendChat
+                ? 'Message friend...'
+                : 'Type message...'
+            }
 
             placeholderTextColor="#64748B"
 
@@ -1553,6 +2682,14 @@ export default function ChatScreen() {
             }
 
             multiline
+
+            editable={
+              isFriendChat
+                ? friendStatus ===
+                    'friends'
+                : status !==
+                    'Partner left'
+            }
           />
 
 
@@ -1563,6 +2700,12 @@ export default function ChatScreen() {
 
             onPress={
               sendMessage
+            }
+
+            disabled={
+              isFriendChat &&
+              friendStatus !==
+                'friends'
             }
           >
 
@@ -1581,9 +2724,290 @@ export default function ChatScreen() {
       </View>
 
 
-      {/* =========================
+      {/* ==================================================
+          ACTION MODAL
+          ================================================== */}
+
+      <Modal
+        visible={
+          showActionModal
+        }
+
+        transparent
+
+        animationType="fade"
+
+        onRequestClose={() =>
+          setShowActionModal(
+            false
+          )
+        }
+      >
+
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+
+          <View
+            style={
+              styles.actionModal
+            }
+          >
+
+            <Text
+              style={
+                styles.actionTitle
+              }
+            >
+              {stranger.name ||
+                'User'}
+            </Text>
+
+
+            {isFriendChat && (
+
+              <TouchableOpacity
+                style={
+                  styles.actionItem
+                }
+
+                onPress={
+                  removeFriend
+                }
+              >
+
+                <Text
+                  style={
+                    styles.actionItemText
+                  }
+                >
+                  Remove Friend
+                </Text>
+
+              </TouchableOpacity>
+
+            )}
+
+
+            <TouchableOpacity
+              style={
+                styles.actionItem
+              }
+
+              onPress={
+                blockUser
+              }
+            >
+
+              <Text
+                style={
+                  styles.actionItemTextDanger
+                }
+              >
+                Block User
+              </Text>
+
+            </TouchableOpacity>
+
+
+            <TouchableOpacity
+              style={
+                styles.actionItem
+              }
+
+              onPress={
+                openReport
+              }
+            >
+
+              <Text
+                style={
+                  styles.actionItemTextDanger
+                }
+              >
+                Report User
+              </Text>
+
+            </TouchableOpacity>
+
+
+            <TouchableOpacity
+              style={
+                styles.cancelAction
+              }
+
+              onPress={() =>
+                setShowActionModal(
+                  false
+                )
+              }
+            >
+
+              <Text
+                style={
+                  styles.cancelActionText
+                }
+              >
+                Cancel
+              </Text>
+
+            </TouchableOpacity>
+
+          </View>
+
+        </View>
+
+      </Modal>
+
+
+      {/* ==================================================
+          REPORT MODAL
+          ================================================== */}
+
+      <Modal
+        visible={
+          showReportModal
+        }
+
+        transparent
+
+        animationType="fade"
+
+        onRequestClose={() =>
+          setShowReportModal(
+            false
+          )
+        }
+      >
+
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+
+          <View
+            style={
+              styles.reportModal
+            }
+          >
+
+            <Text
+              style={
+                styles.modalTitle
+              }
+            >
+              Report User
+            </Text>
+
+
+            <Text
+              style={
+                styles.modalText
+              }
+            >
+              Why are you reporting this user?
+            </Text>
+
+
+            {reportReasons.map(
+              (reason) => (
+
+                <TouchableOpacity
+                  key={
+                    reason
+                  }
+
+                  style={[
+                    styles.reasonButton,
+
+                    selectedReportReason ===
+                      reason &&
+                      styles.reasonButtonSelected,
+                  ]}
+
+                  onPress={() =>
+                    setSelectedReportReason(
+                      reason
+                    )
+                  }
+                >
+
+                  <Text
+                    style={
+                      styles.reasonText
+                    }
+                  >
+                    {reason}
+                  </Text>
+
+                </TouchableOpacity>
+
+              )
+            )}
+
+
+            <TouchableOpacity
+              style={
+                styles.submitReportButton
+              }
+
+              onPress={
+                submitReport
+              }
+            >
+
+              <Text
+                style={
+                  styles.submitReportText
+                }
+              >
+                Submit Report
+              </Text>
+
+            </TouchableOpacity>
+
+
+            <TouchableOpacity
+              style={
+                styles.cancelAction
+              }
+
+              onPress={() => {
+
+                setShowReportModal(
+                  false
+                );
+
+                setSelectedReportReason(
+                  ''
+                );
+
+              }}
+            >
+
+              <Text
+                style={
+                  styles.cancelActionText
+                }
+              >
+                Cancel
+              </Text>
+
+            </TouchableOpacity>
+
+          </View>
+
+        </View>
+
+      </Modal>
+
+
+      {/* ==================================================
           REWARDED AD MODAL
-      ========================= */}
+          ================================================== */}
 
       <Modal
         visible={
@@ -1619,7 +3043,7 @@ export default function ChatScreen() {
             <Text
               style={
                 styles.modalText
-              }
+            }
             >
               Watch ad to unlock more skips
             </Text>
@@ -1630,12 +3054,8 @@ export default function ChatScreen() {
                 styles.watchButton
               }
 
-              onPress={
-                () => {
-
-                  rewarded.show();
-
-                }
+              onPress={() =>
+                rewarded.show()
               }
             >
 
@@ -1755,12 +3175,20 @@ const styles =
     },
 
 
+    actionRow: {
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      marginTop: 10,
+    },
+
+
     // =========================
     // FRIEND BUTTON
     // =========================
 
     friendButton: {
-      marginTop: 10,
       backgroundColor:
         '#16C6E5',
       paddingHorizontal: 22,
@@ -1788,6 +3216,65 @@ const styles =
         '800',
     },
 
+
+    moreButton: {
+      marginLeft: 8,
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor:
+        '#111827',
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+    },
+
+
+    moreButtonText: {
+      color: '#FFFFFF',
+      fontSize: 25,
+      lineHeight: 28,
+      fontWeight:
+        '800',
+    },
+
+
+    // =========================
+    // PARTNER LEFT
+    // =========================
+
+    leftBanner: {
+      marginHorizontal: 16,
+      marginTop: 14,
+      padding: 16,
+      borderRadius: 18,
+      backgroundColor:
+        '#111827',
+      borderWidth: 1,
+      borderColor:
+        '#7F1D1D',
+    },
+
+
+    leftTitle: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight:
+        '800',
+    },
+
+
+    leftText: {
+      color: '#94A3B8',
+      fontSize: 13,
+      marginTop: 5,
+    },
+
+
+    // =========================
+    // CHAT
+    // =========================
 
     chatContainer: {
       paddingHorizontal: 16,
@@ -1936,7 +3423,7 @@ const styles =
 
 
     // =========================
-    // AD MODAL
+    // MODALS
     // =========================
 
     modalOverlay: {
@@ -1950,6 +3437,152 @@ const styles =
     },
 
 
+    actionModal: {
+      width: '85%',
+      backgroundColor:
+        '#081225',
+      borderRadius: 26,
+      padding: 24,
+    },
+
+
+    actionTitle: {
+      color: '#FFFFFF',
+      fontSize: 21,
+      fontWeight:
+        '800',
+      textAlign:
+        'center',
+      marginBottom: 16,
+    },
+
+
+    actionItem: {
+      paddingVertical: 15,
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#1E293B',
+    },
+
+
+    actionItemText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight:
+        '600',
+      textAlign:
+        'center',
+    },
+
+
+    actionItemTextDanger: {
+      color: '#FF6B81',
+      fontSize: 16,
+      fontWeight:
+        '700',
+      textAlign:
+        'center',
+    },
+
+
+    cancelAction: {
+      marginTop: 14,
+      paddingVertical: 13,
+      backgroundColor:
+        '#1E293B',
+      borderRadius: 16,
+    },
+
+
+    cancelActionText: {
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontWeight:
+        '700',
+      textAlign:
+        'center',
+    },
+
+
+    reportModal: {
+      width: '88%',
+      backgroundColor:
+        '#081225',
+      borderRadius: 26,
+      padding: 24,
+    },
+
+
+    modalTitle: {
+      color: 'white',
+      fontSize: 23,
+      fontWeight:
+        '800',
+      textAlign:
+        'center',
+      marginBottom: 10,
+    },
+
+
+    modalText: {
+      color: '#CBD5E1',
+      fontSize: 14,
+      textAlign:
+        'center',
+      marginBottom: 18,
+    },
+
+
+    reasonButton: {
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      backgroundColor:
+        '#111827',
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor:
+        '#1E293B',
+    },
+
+
+    reasonButtonSelected: {
+      borderColor:
+        '#16C6E5',
+      backgroundColor:
+        '#172033',
+    },
+
+
+    reasonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      textAlign:
+        'center',
+      fontWeight:
+        '600',
+    },
+
+
+    submitReportButton: {
+      backgroundColor:
+        '#16C6E5',
+      paddingVertical: 14,
+      borderRadius: 17,
+      marginTop: 10,
+    },
+
+
+    submitReportText: {
+      color: '#000000',
+      fontSize: 15,
+      fontWeight:
+        '800',
+      textAlign:
+        'center',
+    },
+
+
     modalBox: {
       width: '85%',
       backgroundColor:
@@ -1958,24 +3591,6 @@ const styles =
       padding: 28,
       alignItems:
         'center',
-    },
-
-
-    modalTitle: {
-      color: 'white',
-      fontSize: 24,
-      fontWeight:
-        '800',
-      marginBottom: 12,
-    },
-
-
-    modalText: {
-      color: '#CBD5E1',
-      fontSize: 15,
-      textAlign:
-        'center',
-      marginBottom: 28,
     },
 
 

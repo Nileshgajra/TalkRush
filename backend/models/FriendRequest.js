@@ -5,11 +5,13 @@ const FriendRequestSchema = new mongoose.Schema(
     fromUserId: {
       type: String,
       required: true,
+      index: true,
     },
 
     toUserId: {
       type: String,
       required: true,
+      index: true,
     },
 
     status: {
@@ -22,6 +24,11 @@ const FriendRequestSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+FriendRequestSchema.index({
+  fromUserId: 1,
+  toUserId: 1,
+});
 
 module.exports = mongoose.model(
   'FriendRequest',

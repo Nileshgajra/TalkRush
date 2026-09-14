@@ -20,15 +20,15 @@ import {
   RewardedAdEventType,
 } from 'react-native-google-mobile-ads';
 
-import { addCoins, getCoins } from './utils/coins';
+import { addCoins, getCoins, spendCoin } from './utils/coins';
 
 const PROFILE_KEY = '@talkrush_profile';
 
 const BANNER_AD_UNIT_ID =
-  'ca-app-pub-6592726204956042/5797951306';
+  'ca-app-pub-3940256099942544/9214589741';
 
 const REWARDED_AD_UNIT_ID =
-  'ca-app-pub-6592726204956042/9182662547';
+  'ca-app-pub-3940256099942544/5224354917';
 
 type Profile = {
   name: string;
@@ -42,6 +42,10 @@ export default function HomeScreen() {
   const [coins, setCoins] = useState(0);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingAd, setLoadingAd] = useState(false);
+
+  // Gender Match controls
+  const [genderExpanded, setGenderExpanded] = useState(false);
+  const [selectedGender, setSelectedGender] = useState('');
 
   const loadData = async () => {
     try {
@@ -83,18 +87,60 @@ export default function HomeScreen() {
     });
   };
 
-  const openGenderMatch = () => {
+  // Expand / collapse Gender Match
+  const toggleGenderMatch = () => {
     if (!profile) {
       router.replace('/profile');
       return;
     }
 
+    setGenderExpanded((previous) => !previous);
+  };
+
+  // Start Gender Match
+  const continueGenderMatch = async () => {
+    if (!profile) {
+      router.replace('/profile');
+      return;
+    }
+
+    if (!selectedGender) {
+      Alert.alert(
+        'Choose Gender',
+        'Please select Male or Female.'
+      );
+      return;
+    }
+
+    if (coins < 1) {
+      Alert.alert(
+        'Not Enough Coins',
+        'You need 1 coin for Gender Match. Watch an ad to earn a coin.'
+      );
+      return;
+    }
+
+    const success = await spendCoin();
+
+    if (!success) {
+      Alert.alert(
+        'Not Enough Coins',
+        'You need 1 coin for Gender Match.'
+      );
+      return;
+    }
+
+    const newBalance = await getCoins();
+    setCoins(newBalance);
+
     router.push({
-      pathname: '/match',
+      pathname: '/searching',
       params: {
         name: profile.name,
         age: profile.age,
         gender: profile.gender,
+        genderFilter: selectedGender,
+        skipCount: '0',
       },
     });
   };
@@ -190,13 +236,13 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.logo}>
-                TalkRush <Text style={styles.logoHeart}>♥</Text>
+                QELUNO <Text style={styles.logoHeart}>♥</Text>
               </Text>
 
               <Text style={styles.welcome}>
                 {profile?.name
                   ? `Welcome, ${profile.name}`
-                  : 'Welcome to TalkRush'}
+                  : 'Welcome to QELUNO'}
               </Text>
             </View>
 
@@ -248,31 +294,126 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           {/* GENDER MATCH */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={openGenderMatch}
-            activeOpacity={0.88}
+          <View
+            style={[
+              styles.card,
+              genderExpanded && styles.genderExpandedCard,
+            ]}
           >
-            <View style={styles.iconBox}>
-              <Text style={styles.icon}>💕</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.genderHeader}
+              onPress={toggleGenderMatch}
+              activeOpacity={0.88}
+            >
+              <View style={styles.iconBox}>
+                <Text style={styles.icon}>💕</Text>
+              </View>
 
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>
-                Gender Match
-              </Text>
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle}>
+                  Gender Match
+                </Text>
 
-              <Text style={styles.cardSubtitle}>
-                Choose Male or Female
-              </Text>
-            </View>
+                <Text style={styles.cardSubtitle}>
+                  Choose Male or Female
+                </Text>
+              </View>
 
-            <View style={styles.coinBadge}>
-              <Text style={styles.coinBadgeText}>
-                🪙 1
-              </Text>
-            </View>
-          </TouchableOpacity>
+              <View style={styles.coinBadge}>
+                <Text style={styles.coinBadgeText}>
+                  🪙 1
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* EXPANDED GENDER OPTIONS */}
+            {genderExpanded && (
+              <View style={styles.genderOptions}>
+
+                <Text style={styles.chooseText}>
+                  Who do you want to talk to?
+                </Text>
+
+                <View style={styles.genderRow}>
+
+                  {/* MALE */}
+                  <TouchableOpacity
+                    style={[
+                      styles.genderButton,
+                      selectedGender === 'Male' &&
+                        styles.genderButtonSelected,
+                    ]}
+                    onPress={() =>
+                      setSelectedGender('Male')
+                    }
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.genderEmoji}>
+                      👨
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.genderButtonText,
+                        selectedGender === 'Male' &&
+                          styles.genderButtonTextSelected,
+                      ]}
+                    >
+                      Male
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* FEMALE */}
+                  <TouchableOpacity
+                    style={[
+                      styles.genderButton,
+                      selectedGender === 'Female' &&
+                        styles.genderButtonSelected,
+                    ]}
+                    onPress={() =>
+                      setSelectedGender('Female')
+                    }
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.genderEmoji}>
+                      👩
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.genderButtonText,
+                        selectedGender === 'Female' &&
+                          styles.genderButtonTextSelected,
+                      ]}
+                    >
+                      Female
+                    </Text>
+                  </TouchableOpacity>
+
+                </View>
+
+                {/* CONTINUE */}
+                <TouchableOpacity
+                  style={[
+                    styles.continueButton,
+                    !selectedGender &&
+                      styles.continueButtonDisabled,
+                  ]}
+                  onPress={continueGenderMatch}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.continueText}>
+                    Continue ❤️
+                  </Text>
+                </TouchableOpacity>
+
+                <Text style={styles.costText}>
+                  🪙 1 coin required
+                </Text>
+
+              </View>
+            )}
+          </View>
 
           {/* WATCH AD */}
           <TouchableOpacity
@@ -323,6 +464,7 @@ export default function HomeScreen() {
         <View style={styles.bottomSafeArea}>
           <View style={styles.bottomNav}>
 
+            {/* HOME */}
             <TouchableOpacity
               style={styles.navItem}
               activeOpacity={0.8}
@@ -336,6 +478,7 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
 
+            {/* FRIENDS */}
             <TouchableOpacity
               style={styles.navItem}
               onPress={openFriends}
@@ -350,19 +493,22 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
 
-           <TouchableOpacity
-  style={styles.navItem}
-  onPress={() => router.push('/settings' as any)}
-  activeOpacity={0.8}
->
-  <Text style={styles.navIcon}>
-    ⚙
-  </Text>
+            {/* SETTINGS */}
+            <TouchableOpacity
+              style={styles.navItem}
+              onPress={() =>
+                router.push('/settings' as any)
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.navIcon}>
+                ⚙
+              </Text>
 
-  <Text style={styles.navText}>
-    Settings
-  </Text>
-</TouchableOpacity>
+              <Text style={styles.navText}>
+                Settings
+              </Text>
+            </TouchableOpacity>
 
           </View>
         </View>
@@ -385,11 +531,7 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     paddingHorizontal: 18,
-
-    // Header moved lower
     paddingTop: Platform.OS === 'android' ? 18 : 12,
-
-    // Space before bottom navigation
     paddingBottom: 12,
   },
 
@@ -465,12 +607,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1B0C14',
     borderRadius: 18,
     padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#38202B',
     marginBottom: 9,
     minHeight: 72,
+  },
+
+  genderExpandedCard: {
+    paddingBottom: 14,
+    borderColor: '#64213D',
+  },
+
+  genderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
   iconBox: {
@@ -532,6 +682,87 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+  /* GENDER OPTIONS */
+
+  genderOptions: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#38202B',
+  },
+
+  chooseText: {
+    color: '#FFF7FB',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  genderButton: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 14,
+    backgroundColor: '#29101B',
+    borderWidth: 1,
+    borderColor: '#4A1D30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+
+  genderButtonSelected: {
+    backgroundColor: '#FF4F81',
+    borderColor: '#FF4F81',
+  },
+
+  genderEmoji: {
+    fontSize: 20,
+    marginRight: 7,
+  },
+
+  genderButtonText: {
+    color: '#D4C2CB',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  genderButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+
+  continueButton: {
+    marginTop: 12,
+    minHeight: 50,
+    borderRadius: 14,
+    backgroundColor: '#FF4F81',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  continueButtonDisabled: {
+    opacity: 0.55,
+  },
+
+  continueText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  costText: {
+    color: '#A995A1',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+
+  /* REWARD CARD */
+
   rewardCard: {
     backgroundColor: '#26101A',
     borderRadius: 18,
@@ -589,11 +820,8 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
 
-  /*
-   * Safe-area bottom navigation.
-   * The extra bottom padding prevents Android gesture/
-   * navigation buttons from covering Home/Friends/Profile.
-   */
+  /* BOTTOM NAV */
+
   bottomSafeArea: {
     backgroundColor: '#180A11',
     paddingBottom: Platform.OS === 'android' ? 8 : 4,

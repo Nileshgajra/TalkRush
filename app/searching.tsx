@@ -50,6 +50,7 @@ export default function SearchingScreen() {
   const [starting, setStarting] =
     useState(true);
 
+
   // =========================
   // TIMER
   // =========================
@@ -58,15 +59,18 @@ export default function SearchingScreen() {
 
     const timer =
       setInterval(() => {
+
         setSeconds(
           (prev) => prev + 1
         );
+
       }, 1000);
 
     return () =>
       clearInterval(timer);
 
   }, []);
+
 
   // =========================
   // ANIMATED DOTS
@@ -93,6 +97,7 @@ export default function SearchingScreen() {
       clearInterval(dotInterval);
 
   }, []);
+
 
   // =========================
   // START SEARCH
@@ -126,6 +131,7 @@ export default function SearchingScreen() {
             typeof gender === 'string'
               ? gender
               : '';
+
 
           // =========================
           // FALLBACK TO SAVED PROFILE
@@ -172,16 +178,20 @@ export default function SearchingScreen() {
 
           }
 
+
           if (!mounted) {
             return;
           }
 
+
           setStarting(false);
+
 
           console.log(
             'Searching Started:',
             finalUserId
           );
+
 
           // =========================
           // CLEAR OLD LISTENERS
@@ -191,32 +201,6 @@ export default function SearchingScreen() {
           socket.off('searching');
           socket.off('disconnected');
 
-          // =========================
-          // FIND STRANGER
-          // =========================
-
-          socket.emit(
-            'find-stranger',
-            {
-              userId:
-                finalUserId,
-
-              name:
-                finalName,
-
-              age:
-                finalAge,
-
-              gender:
-                finalGender,
-
-              genderFilter:
-                typeof genderFilter ===
-                'string'
-                  ? genderFilter
-                  : 'Random',
-            }
-          );
 
           // =========================
           // SEARCHING
@@ -233,6 +217,7 @@ export default function SearchingScreen() {
             }
           );
 
+
           // =========================
           // MATCHED
           // =========================
@@ -246,8 +231,11 @@ export default function SearchingScreen() {
                 partnerData
               );
 
+
               router.replace({
-                pathname: '/chat',
+
+                pathname:
+                  '/chat',
 
                 params: {
 
@@ -281,7 +269,7 @@ export default function SearchingScreen() {
 
                   strangerName:
                     partnerData?.name ||
-                    'TalkRush User',
+                    'QELUNO User',
 
                   strangerAge:
                     String(
@@ -292,8 +280,40 @@ export default function SearchingScreen() {
                   strangerGender:
                     partnerData?.gender ||
                     '',
+
                 },
+
               });
+
+            }
+          );
+
+
+          // =========================
+          // FIND STRANGER
+          // =========================
+
+          socket.emit(
+            'find-stranger',
+            {
+
+              userId:
+                finalUserId,
+
+              name:
+                finalName,
+
+              age:
+                finalAge,
+
+              gender:
+                finalGender,
+
+              genderFilter:
+                typeof genderFilter ===
+                'string'
+                  ? genderFilter
+                  : 'Random',
 
             }
           );
@@ -306,14 +326,20 @@ export default function SearchingScreen() {
           );
 
           if (mounted) {
-            setStarting(false);
+
+            setStarting(
+              false
+            );
+
           }
 
         }
 
       };
 
+
     startSearching();
+
 
     return () => {
 
@@ -327,6 +353,7 @@ export default function SearchingScreen() {
 
   }, []);
 
+
   // =========================
   // CANCEL
   // =========================
@@ -337,21 +364,42 @@ export default function SearchingScreen() {
       'disconnect-partner'
     );
 
+
     socket.off('matched');
     socket.off('searching');
     socket.off('disconnected');
 
-    router.replace('/home');
+
+    router.replace(
+      '/home'
+    );
 
   };
 
+
+  // =========================
+  // UI
+  // =========================
+
   return (
 
-    <View style={styles.container}>
+    <View
+      style={
+        styles.container
+      }
+    >
 
-      <View style={styles.outerCircle}>
+      <View
+        style={
+          styles.outerCircle
+        }
+      >
 
-        <View style={styles.circle}>
+        <View
+          style={
+            styles.circle
+          }
+        >
 
           <ActivityIndicator
             size="large"
@@ -362,31 +410,64 @@ export default function SearchingScreen() {
 
       </View>
 
-      <Text style={styles.title}>
+
+      <Text
+        style={
+          styles.title
+        }
+      >
         Finding Stranger{dots}
       </Text>
 
-      <Text style={styles.subTitle}>
+
+      <Text
+        style={
+          styles.subTitle
+        }
+      >
         Matching you anonymously
       </Text>
 
-      <Text style={styles.hint}>
+
+      <Text
+        style={
+          styles.hint
+        }
+      >
         {starting
           ? 'Starting search...'
           : 'Please wait while we find someone'}
       </Text>
 
-      <Text style={styles.timer}>
+
+      <Text
+        style={
+          styles.timer
+        }
+      >
         Searching for {seconds}s
       </Text>
 
+
       <TouchableOpacity
-        style={styles.cancelButton}
-        onPress={cancelSearch}
-        activeOpacity={0.85}
+        style={
+          styles.cancelButton
+        }
+
+        onPress={
+          cancelSearch
+        }
+
+        activeOpacity={
+          0.85
+        }
       >
 
-        <Text style={styles.cancelText}>
+        <Text
+          style={
+            styles.cancelText
+          }
+        >
           Cancel Search
         </Text>
 
@@ -395,80 +476,183 @@ export default function SearchingScreen() {
     </View>
 
   );
+
 }
 
-const styles = StyleSheet.create({
 
-  container: {
-    flex: 1,
-    backgroundColor: '#12070D',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 80,
-  },
+// ==================================================
+// STYLES
+// ==================================================
 
-  outerCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 999,
-    backgroundColor:
-      'rgba(255,79,129,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
-  },
+const styles =
+  StyleSheet.create({
 
-  circle: {
-    width: 110,
-    height: 110,
-    borderRadius: 999,
-    backgroundColor: '#1B0C14',
-    borderWidth: 1,
-    borderColor: '#4A1D30',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+    container: {
 
-  title: {
-    color: '#FF4F81',
-    fontSize: 30,
-    fontWeight: '800',
-    marginBottom: 12,
-  },
+      flex: 1,
 
-  subTitle: {
-    color: '#A995A1',
-    fontSize: 16,
-    textAlign: 'center',
-  },
+      backgroundColor:
+        '#12070D',
 
-  hint: {
-    color: '#806D79',
-    fontSize: 13,
-    marginTop: 10,
-  },
+      justifyContent:
+        'center',
 
-  timer: {
-    color: '#A995A1',
-    fontSize: 14,
-    marginTop: 18,
-  },
+      alignItems:
+        'center',
 
-  cancelButton: {
-    marginTop: 45,
-    backgroundColor: '#29101B',
-    borderWidth: 1,
-    borderColor: '#4A1D30',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 20,
-  },
+      paddingHorizontal:
+        24,
 
-  cancelText: {
-    color: '#FFF7FB',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+      paddingBottom:
+        80,
 
-});
+    },
+
+
+    outerCircle: {
+
+      width: 150,
+
+      height: 150,
+
+      borderRadius: 999,
+
+      backgroundColor:
+        'rgba(255,79,129,0.08)',
+
+      justifyContent:
+        'center',
+
+      alignItems:
+        'center',
+
+      marginBottom:
+        40,
+
+    },
+
+
+    circle: {
+
+      width: 110,
+
+      height: 110,
+
+      borderRadius: 999,
+
+      backgroundColor:
+        '#1B0C14',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#4A1D30',
+
+      justifyContent:
+        'center',
+
+      alignItems:
+        'center',
+
+    },
+
+
+    title: {
+
+      color:
+        '#FF4F81',
+
+      fontSize:
+        30,
+
+      fontWeight:
+        '800',
+
+      marginBottom:
+        12,
+
+    },
+
+
+    subTitle: {
+
+      color:
+        '#A995A1',
+
+      fontSize:
+        16,
+
+      textAlign:
+        'center',
+
+    },
+
+
+    hint: {
+
+      color:
+        '#806D79',
+
+      fontSize:
+        13,
+
+      marginTop:
+        10,
+
+    },
+
+
+    timer: {
+
+      color:
+        '#A995A1',
+
+      fontSize:
+        14,
+
+      marginTop:
+        18,
+
+    },
+
+
+    cancelButton: {
+
+      marginTop:
+        45,
+
+      backgroundColor:
+        '#29101B',
+
+      borderWidth:
+        1,
+
+      borderColor:
+        '#4A1D30',
+
+      paddingVertical:
+        16,
+
+      paddingHorizontal:
+        32,
+
+      borderRadius:
+        20,
+
+    },
+
+
+    cancelText: {
+
+      color:
+        '#FFF7FB',
+
+      fontSize:
+        15,
+
+      fontWeight:
+        '700',
+
+    },
+
+  });

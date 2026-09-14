@@ -26,11 +26,30 @@ const UserSchema = new mongoose.Schema(
       enum: ['Male', 'Female'],
     },
 
+    pushToken: {
+      type: String,
+      default: '',
+    },
+
+    // =========================
+    // FRIENDS
+    // =========================
+
     friends: [
       {
         type: String,
       },
     ],
+
+    blockedUsers: [
+  {
+    type: String,
+     },
+    ],
+
+    // =========================
+    // FRIEND REQUESTS
+    // =========================
 
     friendRequests: [
       {
@@ -44,6 +63,16 @@ const UserSchema = new mongoose.Schema(
           enum: ['pending', 'accepted', 'rejected'],
           default: 'pending',
         },
+      },
+    ],
+
+    // =========================
+    // BLOCKED USERS
+    // =========================
+
+    blockedUsers: [
+      {
+        type: String,
       },
     ],
   },
