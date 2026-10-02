@@ -158,6 +158,9 @@ export default function HomeScreen() {
 
     setLoadingAd(true);
 
+    let adShown = false;
+    let rewardGranted = false;
+
     const rewarded = RewardedAd.createForAdRequest(
       REWARDED_AD_UNIT_ID,
       {
@@ -168,6 +171,11 @@ export default function HomeScreen() {
     const unsubscribeLoaded = rewarded.addAdEventListener(
       RewardedAdEventType.LOADED,
       () => {
+        if (adShown) {
+          return;
+        }
+
+        adShown = true;
         rewarded.show();
       }
     );
@@ -175,6 +183,12 @@ export default function HomeScreen() {
     const unsubscribeEarned = rewarded.addAdEventListener(
       RewardedAdEventType.EARNED_REWARD,
       async () => {
+        if (rewardGranted) {
+          return;
+        }
+
+        rewardGranted = true;
+
         try {
           const newBalance = await addCoins(1);
           setCoins(newBalance);

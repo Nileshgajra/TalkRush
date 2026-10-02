@@ -9,5 +9,8 @@ googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json"
     ...(config.plugins || []),
     "@react-native-firebase/app",
     "@react-native-firebase/analytics",
+    "@react-native-firebase/messaging",
+    "expo-notifications",
+    "expo-video",
   ],
 });

@@ -165,9 +165,27 @@ export default function FriendScreen() {
 
       load();
 
+      const handleFriendRemoved = () => {
+        void loadProfile()
+          .then((currentProfile) => {
+            if (active) {
+              loadFriendData(currentProfile);
+            }
+          });
+      };
+
+      socket.on(
+        'friend-removed',
+        handleFriendRemoved
+      );
+
       return () => {
         active = false;
         socket.off('friend-data');
+        socket.off(
+          'friend-removed',
+          handleFriendRemoved
+        );
       };
 
     }, [])

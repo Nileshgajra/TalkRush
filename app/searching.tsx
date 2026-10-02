@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
@@ -49,6 +50,8 @@ export default function SearchingScreen() {
 
   const [starting, setStarting] =
     useState(true);
+
+  const matchedRef = useRef(false);
 
 
   // =========================
@@ -226,6 +229,8 @@ export default function SearchingScreen() {
             'matched',
             (partnerData) => {
 
+              matchedRef.current = true;
+
               console.log(
                 'Matched Successfully:',
                 partnerData
@@ -345,6 +350,12 @@ export default function SearchingScreen() {
 
       mounted = false;
 
+      // Leaving this screen before a match (for example with the Android
+      // back gesture) must also remove the socket from the server queue.
+      if (!matchedRef.current) {
+        socket.emit('disconnect-partner');
+      }
+
       socket.off('matched');
       socket.off('searching');
       socket.off('disconnected');
@@ -359,6 +370,8 @@ export default function SearchingScreen() {
   // =========================
 
   const cancelSearch = () => {
+
+    matchedRef.current = true;
 
     socket.emit(
       'disconnect-partner'

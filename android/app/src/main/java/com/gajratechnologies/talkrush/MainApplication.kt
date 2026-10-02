@@ -1,6 +1,9 @@
 package com.gajratechnologies.talkrush
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.content.res.Configuration
 
 import com.facebook.react.PackageList
@@ -40,6 +43,18 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel(
+        "friend-messages",
+        "Friend messages",
+        NotificationManager.IMPORTANCE_HIGH
+      ).apply {
+        description = "Notifications for new friend messages"
+      }
+
+      getSystemService(NotificationManager::class.java)
+        .createNotificationChannel(channel)
+    }
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {

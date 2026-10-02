@@ -1,4 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import {
+  useVideoPlayer,
+  VideoView,
+} from 'expo-video';
 
 import React, {
   useEffect,
@@ -8,8 +13,10 @@ import React, {
 
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -34,6 +41,10 @@ import {
 } from 'react-native-google-mobile-ads';
 
 import socket from '../socket';
+import {
+  addCoins,
+  spendCoin,
+} from './utils/coins';
 
 
 // =========================
@@ -62,6 +73,46 @@ type Profile = {
   photo?: string;
 };
 
+type SelectedMedia = {
+  uri: string;
+  type: 'image' | 'video';
+  contentType: string;
+  size: number;
+  duration: number;
+};
+
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_DURATION_SECONDS = 60;
+
+function ChatVideo({
+  uri,
+  compact = false,
+}: {
+  uri: string;
+  compact?: boolean;
+}) {
+  const player = useVideoPlayer(
+    uri,
+    (videoPlayer) => {
+      videoPlayer.loop = false;
+    }
+  );
+
+  return (
+    <VideoView
+      player={player}
+      style={
+        compact
+          ? styles.mediaPreviewVideo
+          : styles.mediaVideo
+      }
+      nativeControls
+      contentFit="contain"
+    />
+  );
+}
+
 
 export default function ChatScreen() {
 
@@ -82,6 +133,21 @@ export default function ChatScreen() {
   const isLeavingRef =
     useRef(false);
 
+  const uploadRequestRef =
+    useRef<XMLHttpRequest | null>(null);
+
+  const mediaUploadCancelledRef =
+    useRef(false);
+
+  const rewardedAdShowingRef =
+    useRef(false);
+
+  const rewardedAdGrantedRef =
+    useRef(false);
+
+  const friendRequestCoinPendingRef =
+    useRef(false);
+
 
   // =========================
   // FRIEND MODE
@@ -97,6 +163,42 @@ export default function ChatScreen() {
     String(
       params.strangerUserId || ''
     );
+
+
+  // Tell the server when this is the chat the user is actively viewing so it
+  // can avoid presenting a redundant push notification for that conversation.
+  useEffect(() => {
+
+    if (!isFriendChat || !friendId) {
+      return;
+    }
+
+    const setActiveFriendChat = () => {
+      socket.emit(
+        'set-active-friend-chat',
+        {
+          friendId,
+        }
+      );
+    };
+
+    setActiveFriendChat();
+    socket.on('connect', setActiveFriendChat);
+
+    return () => {
+      socket.emit(
+        'set-active-friend-chat',
+        {
+          friendId: '',
+        }
+      );
+      socket.off('connect', setActiveFriendChat);
+    };
+
+  }, [
+    friendId,
+    isFriendChat,
+  ]);
 
 
   // =========================
@@ -146,6 +248,15 @@ export default function ChatScreen() {
   const [messages, setMessages] =
     useState<any[]>([]);
 
+  const [selectedMedia, setSelectedMedia] =
+    useState<SelectedMedia | null>(null);
+
+  const [isUploadingMedia, setIsUploadingMedia] =
+    useState(false);
+
+  const [mediaUploadProgress, setMediaUploadProgress] =
+    useState(0);
+
 
   // =========================
   // STATUS
@@ -184,6 +295,9 @@ export default function ChatScreen() {
   // =========================
 
   const [showAdModal, setShowAdModal] =
+    useState(false);
+
+  const [isRewardedAdLoaded, setIsRewardedAdLoaded] =
     useState(false);
 
 
@@ -325,6 +439,8 @@ export default function ChatScreen() {
         RewardedAdEventType.LOADED,
         () => {
 
+          setIsRewardedAdLoaded(true);
+
           console.log(
             'Rewarded Ad Loaded'
           );
@@ -336,17 +452,57 @@ export default function ChatScreen() {
     const unsubscribeReward =
       rewarded.addAdEventListener(
         RewardedAdEventType.EARNED_REWARD,
-        () => {
+        async () => {
 
-          setSkipCount(0);
+          if (rewardedAdGrantedRef.current) {
+            return;
+          }
 
-          setShowAdModal(false);
+          rewardedAdGrantedRef.current = true;
 
-          isLeavingRef.current =
-            false;
+          try {
+            await addCoins(1);
+
+            setSkipCount(0);
+            setShowAdModal(false);
+            isLeavingRef.current = false;
+          } catch (error) {
+            console.log(
+              'Skip reward coin error:',
+              error
+            );
+
+            Alert.alert(
+              'Coin Reward Error',
+              'Your reward could not be saved. Please reopen the app before trying again.'
+            );
+          }
+
+          setIsRewardedAdLoaded(false);
 
           rewarded.load();
 
+        }
+      );
+
+    const unsubscribeError =
+      rewarded.addAdEventListener(
+        AdEventType.ERROR,
+        (error) => {
+          console.log(
+            'Rewarded ad error:',
+            error
+          );
+
+          rewardedAdShowingRef.current = false;
+          setIsRewardedAdLoaded(false);
+          setShowAdModal(false);
+          rewarded.load();
+
+          Alert.alert(
+            'Ad unavailable',
+            'Please try again in a moment.'
+          );
         }
       );
 
@@ -356,7 +512,11 @@ export default function ChatScreen() {
         AdEventType.CLOSED,
         () => {
 
+          setIsRewardedAdLoaded(false);
+
           setShowAdModal(false);
+
+          rewardedAdShowingRef.current = false;
 
           isLeavingRef.current =
             false;
@@ -375,9 +535,29 @@ export default function ChatScreen() {
 
       unsubscribeClosed();
 
+      unsubscribeError();
+
     };
 
   }, []);
+
+  const showRewardedAd = () => {
+
+    if (rewardedAdShowingRef.current) {
+      return;
+    }
+
+    if (!isRewardedAdLoaded) {
+      rewarded.load();
+      return;
+    }
+
+    rewardedAdShowingRef.current = true;
+    rewardedAdGrantedRef.current = false;
+    setIsRewardedAdLoaded(false);
+    rewarded.show();
+
+  };
 
 
   // ==================================================
@@ -451,6 +631,9 @@ export default function ChatScreen() {
     socket.off('typing');
     socket.off('seen');
     socket.off('disconnected');
+    socket.off('media-message');
+    socket.off('media-message-sent');
+    socket.off('media-message-error');
 
     socket.off(
       'friend-message'
@@ -478,6 +661,10 @@ export default function ChatScreen() {
 
     socket.off(
       'user-status'
+    );
+
+    socket.off(
+      'presence-updated'
     );
 
     socket.off(
@@ -622,6 +809,65 @@ export default function ChatScreen() {
       }
     );
 
+    socket.on(
+      'media-message',
+      (data) => {
+        if (
+          isFriendChat ||
+          data?.senderId !== friendId
+        ) {
+          return;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...data,
+            sender: 'other',
+          },
+        ]);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({
+            animated: true,
+          });
+        }, 100);
+      }
+    );
+
+    socket.on(
+      'media-message-sent',
+      (data) => {
+        if (isFriendChat) {
+          return;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...data,
+            sender: 'me',
+          },
+        ]);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({
+            animated: true,
+          });
+        }, 100);
+      }
+    );
+
+    socket.on(
+      'media-message-error',
+      (data) => {
+        Alert.alert(
+          'Media',
+          data?.message || 'Could not send media.'
+        );
+      }
+    );
+
 
     // ==================================================
     // FRIEND MESSAGE
@@ -668,6 +914,15 @@ export default function ChatScreen() {
 
                 text:
                   data.text,
+
+                mediaType:
+                  data.mediaType,
+
+                mediaUrl:
+                  data.mediaUrl,
+
+                mediaPath:
+                  data.mediaPath,
 
                 sender:
                   'other',
@@ -764,6 +1019,15 @@ export default function ChatScreen() {
                 text:
                   data.text,
 
+                mediaType:
+                  data.mediaType,
+
+                mediaUrl:
+                  data.mediaUrl,
+
+                mediaPath:
+                  data.mediaPath,
+
                 sender:
                   'me',
 
@@ -857,6 +1121,15 @@ export default function ChatScreen() {
               text:
                 item.text,
 
+              mediaType:
+                item.mediaType,
+
+              mediaUrl:
+                item.mediaUrl,
+
+              mediaPath:
+                item.mediaPath,
+
               sender:
                 item.senderId ===
                   (
@@ -915,12 +1188,29 @@ export default function ChatScreen() {
       'friend-message-seen',
       (data) => {
 
+        if (!isFriendChat) {
+          return;
+        }
+
+        const seenMessageIds =
+          new Set(
+            data?.messageIds ||
+            (data?.messageId
+              ? [data.messageId]
+              : [])
+          );
+
+        if (seenMessageIds.size === 0) {
+          return;
+        }
+
         setMessages(
           (prev) =>
             prev.map(
               (item) =>
-                item.id ===
-                  data?.messageId
+                seenMessageIds.has(
+                  item.id
+                )
                   ? {
                       ...item,
                       seen: true,
@@ -982,6 +1272,26 @@ export default function ChatScreen() {
           return;
         }
 
+
+        setStatus(
+          data.online
+            ? 'Online'
+            : 'Offline'
+        );
+
+      }
+    );
+
+    socket.on(
+      'presence-updated',
+      (data) => {
+
+        if (
+          !isFriendChat ||
+          data?.userId !== friendId
+        ) {
+          return;
+        }
 
         setStatus(
           data.online
@@ -1131,6 +1441,9 @@ export default function ChatScreen() {
             'Friend request sent.'
           ) {
 
+            friendRequestCoinPendingRef.current =
+              false;
+
             setFriendStatus(
               'sent'
             );
@@ -1175,6 +1488,18 @@ export default function ChatScreen() {
         }
 
         else {
+
+          if (friendRequestCoinPendingRef.current) {
+            friendRequestCoinPendingRef.current =
+              false;
+
+            void addCoins(1).catch((error) => {
+              console.log(
+                'Friend request coin refund error:',
+                error
+              );
+            });
+          }
 
           setFriendStatus(
             'none'
@@ -1432,6 +1757,9 @@ export default function ChatScreen() {
       socket.off('seen');
 
       socket.off('disconnected');
+      socket.off('media-message');
+      socket.off('media-message-sent');
+      socket.off('media-message-error');
 
       socket.off(
         'friend-message'
@@ -1459,6 +1787,10 @@ export default function ChatScreen() {
 
       socket.off(
         'user-status'
+      );
+
+      socket.off(
+        'presence-updated'
       );
 
       socket.off(
@@ -1496,11 +1828,57 @@ export default function ChatScreen() {
 
 
   // ==================================================
+  // REFRESH FRIEND PRESENCE
+  // ==================================================
+
+  useEffect(() => {
+
+    if (
+      !isFriendChat ||
+      !friendId
+    ) {
+      return;
+    }
+
+    const refreshPartnerStatus = () => {
+      socket.emit(
+        'get-user-status',
+        {
+          userId: friendId,
+        }
+      );
+    };
+
+    const appStateSubscription =
+      AppState.addEventListener(
+        'change',
+        (nextAppState) => {
+          if (nextAppState === 'active') {
+            refreshPartnerStatus();
+          }
+        }
+      );
+
+    socket.on('connect', refreshPartnerStatus);
+    refreshPartnerStatus();
+
+    return () => {
+      appStateSubscription.remove();
+      socket.off('connect', refreshPartnerStatus);
+    };
+
+  }, [
+    friendId,
+    isFriendChat,
+  ]);
+
+
+  // ==================================================
   // SEND FRIEND REQUEST
   // ==================================================
 
   const sendFriendRequest =
-    () => {
+    async () => {
 
       const senderId =
         myUserId ||
@@ -1583,9 +1961,19 @@ export default function ChatScreen() {
       }
 
 
-      setFriendStatus(
-        'sending'
-      );
+      const spentCoin = await spendCoin();
+
+      if (!spentCoin) {
+        Alert.alert(
+          'Not Enough Coins',
+          'You need 1 coin to send a friend request.'
+        );
+        return;
+      }
+
+      friendRequestCoinPendingRef.current = true;
+
+      setFriendStatus('sending');
 
 
       socket.emit(
@@ -1601,6 +1989,330 @@ export default function ChatScreen() {
 
     };
 
+
+  // ==================================================
+  // MEDIA PICKER AND UPLOAD
+  // ==================================================
+
+  const getMediaType = (
+    mimeType: string,
+    uri: string
+  ) => {
+    const normalizedMimeType =
+      mimeType.toLowerCase();
+    const normalizedUri = uri.toLowerCase();
+
+    const contentType = normalizedMimeType ||
+      (normalizedUri.endsWith('.jpg') ||
+      normalizedUri.endsWith('.jpeg')
+        ? 'image/jpeg'
+        : normalizedUri.endsWith('.png')
+          ? 'image/png'
+          : normalizedUri.endsWith('.webp')
+            ? 'image/webp'
+            : normalizedUri.endsWith('.mp4')
+              ? 'video/mp4'
+              : normalizedUri.endsWith('.mov')
+                ? 'video/quicktime'
+                : normalizedUri.endsWith('.webm')
+                  ? 'video/webm'
+                  : '');
+
+    if (
+      ['image/jpeg', 'image/png', 'image/webp']
+        .includes(contentType)
+    ) {
+      return {
+        type: 'image' as const,
+        contentType,
+      };
+    }
+
+    if (
+      ['video/mp4', 'video/quicktime', 'video/webm']
+        .includes(contentType)
+    ) {
+      return {
+        type: 'video' as const,
+        contentType,
+      };
+    }
+
+    return null;
+  };
+
+  const getMediaFileSize = async (
+    uri: string,
+    knownSize?: number | null
+  ) => {
+    if (knownSize && knownSize > 0) {
+      return knownSize;
+    }
+
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return blob.size;
+  };
+
+  const pickMedia = async () => {
+    if (isUploadingMedia) {
+      return;
+    }
+
+    if (
+      (isFriendChat && friendStatus !== 'friends') ||
+      (!isFriendChat && status === 'Partner left')
+    ) {
+      Alert.alert(
+        'Unavailable',
+        'This chat is no longer available for media sharing.'
+      );
+      return;
+    }
+
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Allow media access to share photos and videos.'
+        );
+        return;
+      }
+
+      const result =
+        await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images', 'videos'],
+          allowsEditing: false,
+          quality: 0.9,
+          videoMaxDuration: MAX_VIDEO_DURATION_SECONDS,
+        });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      const mediaDetails = getMediaType(
+        asset.mimeType || '',
+        asset.uri
+      );
+
+      if (!mediaDetails) {
+        Alert.alert(
+          'Unsupported File',
+          'Choose a JPG, PNG, WEBP, MP4, MOV, or WEBM file.'
+        );
+        return;
+      }
+
+      const size = await getMediaFileSize(
+        asset.uri,
+        asset.fileSize
+      );
+      const duration = mediaDetails.type === 'video'
+        ? (asset.duration || 0) / 1000
+        : 0;
+
+      if (
+        mediaDetails.type === 'image' &&
+        size > MAX_IMAGE_SIZE_BYTES
+      ) {
+        Alert.alert(
+          'Photo Too Large',
+          'Photos must be 10 MB or smaller.'
+        );
+        return;
+      }
+
+      if (
+        mediaDetails.type === 'video' &&
+        size > MAX_VIDEO_SIZE_BYTES
+      ) {
+        Alert.alert(
+          'Video Too Large',
+          'Videos must be 25 MB or smaller.'
+        );
+        return;
+      }
+
+      if (
+        mediaDetails.type === 'video' &&
+        duration > MAX_VIDEO_DURATION_SECONDS
+      ) {
+        Alert.alert(
+          'Video Too Long',
+          'Videos must be 60 seconds or shorter.'
+        );
+        return;
+      }
+
+      setSelectedMedia({
+        uri: asset.uri,
+        type: mediaDetails.type,
+        contentType: mediaDetails.contentType,
+        size,
+        duration,
+      });
+
+    } catch (error) {
+      console.log('Media picker error:', error);
+      Alert.alert(
+        'Media Error',
+        'Could not open the media library.'
+      );
+    }
+  };
+
+  const uploadToSignedUrl = async (
+    media: SelectedMedia,
+    uploadUrl: string
+  ) => {
+    const fileResponse = await fetch(media.uri);
+    const fileBlob = await fileResponse.blob();
+
+    await new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      uploadRequestRef.current = request;
+
+      request.open('PUT', uploadUrl);
+      request.setRequestHeader(
+        'Content-Type',
+        media.contentType
+      );
+      request.setRequestHeader('x-upsert', 'false');
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          setMediaUploadProgress(
+            Math.round(
+              (event.loaded / event.total) * 100
+            )
+          );
+        }
+      };
+      request.onload = () => {
+        uploadRequestRef.current = null;
+
+        if (request.status >= 200 && request.status < 300) {
+          resolve();
+        } else {
+          reject(new Error('Media upload failed.'));
+        }
+      };
+      request.onerror = () => {
+        uploadRequestRef.current = null;
+        reject(new Error('Media upload failed.'));
+      };
+      request.onabort = () => {
+        uploadRequestRef.current = null;
+        reject(new Error('Media upload cancelled.'));
+      };
+      request.send(fileBlob);
+    });
+  };
+
+  const sendMedia = async () => {
+    if (!selectedMedia || isUploadingMedia) {
+      return;
+    }
+
+    const senderId = myUserId ||
+      String(params.myUserId || '');
+    const receiverId = stranger.userId ||
+      String(params.strangerUserId || '');
+
+    if (!senderId || !receiverId) {
+      Alert.alert(
+        'Unavailable',
+        'This chat is no longer available.'
+      );
+      return;
+    }
+
+    setIsUploadingMedia(true);
+    setMediaUploadProgress(0);
+    mediaUploadCancelledRef.current = false;
+
+    try {
+      const upload = await new Promise<any>(
+        (resolve) => {
+          socket.emit(
+            'request-media-upload',
+            {
+              chatType:
+                isFriendChat ? 'friend' : 'random',
+              receiverId,
+              media: {
+                type: selectedMedia.type,
+                contentType: selectedMedia.contentType,
+                size: selectedMedia.size,
+                duration: selectedMedia.duration,
+              },
+            },
+            resolve
+          );
+        }
+      );
+
+      if (!upload?.success) {
+        throw new Error(
+          upload?.message ||
+          'Could not prepare the media upload.'
+        );
+      }
+
+      await uploadToSignedUrl(
+        selectedMedia,
+        upload.uploadUrl
+      );
+
+      if (mediaUploadCancelledRef.current) {
+        throw new Error('Media upload cancelled.');
+      }
+
+      if (isFriendChat) {
+        socket.emit(
+          'friend-media-message',
+          {
+            senderId,
+            receiverId,
+            mediaPath: upload.mediaPath,
+          }
+        );
+      } else {
+        socket.emit(
+          'media-message',
+          {
+            receiverId,
+            mediaPath: upload.mediaPath,
+          }
+        );
+      }
+
+      setSelectedMedia(null);
+
+    } catch (error: any) {
+      if (error?.message !== 'Media upload cancelled.') {
+        Alert.alert(
+          'Media Upload Failed',
+          error?.message ||
+            'The media was not sent. Please try again.'
+        );
+      }
+    } finally {
+      uploadRequestRef.current = null;
+      setIsUploadingMedia(false);
+      setMediaUploadProgress(0);
+    }
+  };
+
+  const cancelSelectedMedia = () => {
+    mediaUploadCancelledRef.current = true;
+    uploadRequestRef.current?.abort();
+    setSelectedMedia(null);
+  };
 
   // ==================================================
   // SEND MESSAGE
@@ -2525,14 +3237,39 @@ export default function ChatScreen() {
                     : styles.otherMessage,
                 ]}
               >
+                {item.mediaType === 'image' && (
+                  item.mediaUrl ? (
+                    <Image
+                      source={{ uri: item.mediaUrl }}
+                      style={styles.mediaImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.mediaUnavailable}>
+                      Photo unavailable
+                    </Text>
+                  )
+                )}
 
-                <Text
-                  style={
-                    styles.messageText
-                  }
-                >
-                  {item.text}
-                </Text>
+                {item.mediaType === 'video' && (
+                  item.mediaUrl ? (
+                    <ChatVideo uri={item.mediaUrl} />
+                  ) : (
+                    <Text style={styles.mediaUnavailable}>
+                      Video unavailable
+                    </Text>
+                  )
+                )}
+
+                {!!item.text && (
+                  <Text
+                    style={
+                      styles.messageText
+                    }
+                  >
+                    {item.text}
+                  </Text>
+                )}
 
               </View>
 
@@ -2631,6 +3368,42 @@ export default function ChatScreen() {
             INPUT
         ========================= */}
 
+        {selectedMedia && (
+          <View style={styles.mediaPreviewContainer}>
+            {selectedMedia.type === 'image' ? (
+              <Image
+                source={{ uri: selectedMedia.uri }}
+                style={styles.mediaPreviewImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <ChatVideo
+                uri={selectedMedia.uri}
+                compact
+              />
+            )}
+
+            <View style={styles.mediaPreviewActions}>
+              <Text style={styles.mediaPreviewText}>
+                {isUploadingMedia
+                  ? `Uploading ${mediaUploadProgress}%`
+                  : selectedMedia.type === 'image'
+                    ? 'Photo ready to send'
+                    : 'Video ready to send'}
+              </Text>
+
+              <TouchableOpacity
+                onPress={cancelSelectedMedia}
+                style={styles.mediaCancelButton}
+              >
+                <Text style={styles.mediaCancelText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <View
           style={
             styles.inputContainer
@@ -2657,6 +3430,16 @@ export default function ChatScreen() {
                 : 'Next'}
             </Text>
 
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.mediaButton}
+            onPress={pickMedia}
+            disabled={isUploadingMedia}
+          >
+            <Text style={styles.mediaButtonText}>
+              +
+            </Text>
           </TouchableOpacity>
 
 
@@ -2699,13 +3482,16 @@ export default function ChatScreen() {
             }
 
             onPress={
-              sendMessage
+              selectedMedia
+                ? sendMedia
+                : sendMessage
             }
 
             disabled={
               isFriendChat &&
               friendStatus !==
-                'friends'
+                'friends' ||
+              isUploadingMedia
             }
           >
 
@@ -2714,7 +3500,11 @@ export default function ChatScreen() {
                 styles.sendText
               }
             >
-              Send
+              {selectedMedia
+                ? isUploadingMedia
+                  ? '...'
+                  : 'Send Media'
+                : 'Send'}
             </Text>
 
           </TouchableOpacity>
@@ -3054,8 +3844,8 @@ export default function ChatScreen() {
                 styles.watchButton
               }
 
-              onPress={() =>
-                rewarded.show()
+              onPress={
+                showRewardedAd
               }
             >
 
@@ -3318,6 +4108,24 @@ const styles =
       lineHeight: 22,
     },
 
+    mediaImage: {
+      width: 220,
+      height: 220,
+      borderRadius: 14,
+    },
+
+    mediaVideo: {
+      width: 220,
+      height: 180,
+      borderRadius: 14,
+      backgroundColor: '#020617',
+    },
+
+    mediaUnavailable: {
+      color: '#CBD5E1',
+      fontSize: 14,
+    },
+
 
     typingContainer: {
       flexDirection:
@@ -3352,6 +4160,73 @@ const styles =
       backgroundColor:
         '#020617',
       paddingVertical: 4,
+    },
+
+    mediaPreviewContainer: {
+      marginHorizontal: 16,
+      marginBottom: 8,
+      padding: 8,
+      borderRadius: 14,
+      backgroundColor: '#111827',
+      borderWidth: 1,
+      borderColor: '#1E3A5F',
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+
+    mediaPreviewImage: {
+      width: 72,
+      height: 72,
+      borderRadius: 10,
+    },
+
+    mediaPreviewVideo: {
+      width: 110,
+      height: 72,
+      borderRadius: 10,
+      backgroundColor: '#020617',
+    },
+
+    mediaPreviewActions: {
+      flex: 1,
+      marginLeft: 10,
+    },
+
+    mediaPreviewText: {
+      color: '#E2E8F0',
+      fontSize: 13,
+      marginBottom: 8,
+    },
+
+    mediaCancelButton: {
+      alignSelf: 'flex-start',
+      paddingVertical: 5,
+      paddingHorizontal: 9,
+      borderRadius: 8,
+      backgroundColor: '#7F1D1D',
+    },
+
+    mediaCancelText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    mediaButton: {
+      width: 36,
+      height: 42,
+      marginLeft: 8,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#1E3A5F',
+    },
+
+    mediaButtonText: {
+      color: '#00E0FF',
+      fontSize: 24,
+      fontWeight: '500',
+      lineHeight: 27,
     },
 
 

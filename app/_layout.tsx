@@ -4,10 +4,12 @@ import {
   getInitialNotification,
   getMessaging,
   getToken,
+  onMessage,
   onNotificationOpenedApp,
   onTokenRefresh,
 } from '@react-native-firebase/messaging';
 import { router, Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import {
   AppState,
@@ -25,6 +27,17 @@ const NOTIFICATION_PERMISSION_REQUESTED_KEY =
 const firebaseMessaging =
   getMessaging();
 
+let lastOpenedNotificationId = '';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 type Profile = {
   userId?: string;
   name?: string;
@@ -41,6 +54,19 @@ const openFriendChatFromNotification = async (
   ) {
     return;
   }
+
+  const notificationId =
+    remoteMessage.messageId ||
+    `${remoteMessage.data.senderId || ''}:${remoteMessage.sentTime || ''}`;
+
+  if (
+    notificationId &&
+    notificationId === lastOpenedNotificationId
+  ) {
+    return;
+  }
+
+  lastOpenedNotificationId = notificationId;
 
   const savedProfile =
     await AsyncStorage.getItem(PROFILE_KEY);
@@ -85,6 +111,34 @@ const openFriendChatFromNotification = async (
   });
 };
 
+const showForegroundFriendMessageNotification = async (
+  remoteMessage: any
+) => {
+  if (
+    remoteMessage?.data?.type !==
+    'friend-message'
+  ) {
+    return;
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title:
+        remoteMessage.notification?.title ||
+        `New message from ${
+          remoteMessage.data.senderName || 'QELUNO User'
+        }`,
+      body:
+        remoteMessage.notification?.body || '',
+      data: remoteMessage.data,
+      sound: 'default',
+    },
+    trigger: {
+      channelId: 'friend-messages',
+    },
+  });
+};
+
 export default function RootLayout() {
 
   useEffect(() => {
@@ -97,15 +151,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     let currentPushToken = '';
+    let registeredPushToken = '';
+    let registeredPushSocketId = '';
+    let pushSetupInProgress = false;
 
-    const registerPushToken = async (
-      pushToken: string
-    ) => {
+    const getCurrentProfile = async () => {
       const savedProfile =
         await AsyncStorage.getItem(PROFILE_KEY);
 
       if (!savedProfile) {
-        return;
+        return null;
       }
 
       const profile: Profile =
@@ -117,7 +172,18 @@ export default function RootLayout() {
         !profile.age ||
         !profile.gender
       ) {
-        return;
+        return null;
+      }
+
+      return profile;
+    };
+
+    const registerCurrentUser = async () => {
+      const profile =
+        await getCurrentProfile();
+
+      if (!profile || !socket.connected) {
+        return profile;
       }
 
       socket.emit(
@@ -130,6 +196,32 @@ export default function RootLayout() {
         }
       );
 
+      return profile;
+    };
+
+    const registerPushToken = async (
+      pushToken: string,
+      savedProfile?: Profile | null
+    ) => {
+      const profile =
+        savedProfile ||
+        await getCurrentProfile();
+
+      if (
+        !profile?.userId ||
+        !pushToken ||
+        !socket.connected
+      ) {
+        return;
+      }
+
+      if (
+        registeredPushToken === pushToken &&
+        registeredPushSocketId === socket.id
+      ) {
+        return;
+      }
+
       socket.emit(
         'register-push-token',
         {
@@ -137,6 +229,9 @@ export default function RootLayout() {
           pushToken,
         }
       );
+
+      registeredPushToken = pushToken;
+      registeredPushSocketId = socket.id || '';
     };
 
     const setUpPushNotifications = async () => {
@@ -144,46 +239,126 @@ export default function RootLayout() {
         return;
       }
 
-      const alreadyRequested =
-        await AsyncStorage.getItem(
-          NOTIFICATION_PERMISSION_REQUESTED_KEY
-        );
+      const profile =
+        await getCurrentProfile();
 
-      if (!alreadyRequested) {
-        await AsyncStorage.setItem(
-          NOTIFICATION_PERMISSION_REQUESTED_KEY,
-          'true'
+      if (!profile || pushSetupInProgress) {
+        return;
+      }
+
+      pushSetupInProgress = true;
+
+      try {
+        let notificationsAllowed = true;
+
+        await Notifications.setNotificationChannelAsync(
+          'friend-messages',
+          {
+            name: 'Friend messages',
+            description:
+              'Notifications for new friend messages',
+            importance:
+              Notifications.AndroidImportance.HIGH,
+            sound: 'default',
+            vibrationPattern: [0, 250, 250, 250],
+          }
         );
 
         if (Number(Platform.Version) >= 33) {
-          await PermissionsAndroid.request(
+          const permission =
             PermissionsAndroid.PERMISSIONS
-              .POST_NOTIFICATIONS
-          );
+              .POST_NOTIFICATIONS;
+
+          notificationsAllowed =
+            await PermissionsAndroid.check(permission);
+
+          if (!notificationsAllowed) {
+            const alreadyRequested =
+              await AsyncStorage.getItem(
+                NOTIFICATION_PERMISSION_REQUESTED_KEY
+              );
+
+            if (!alreadyRequested) {
+              const result =
+                await PermissionsAndroid.request(permission);
+
+              await AsyncStorage.setItem(
+                NOTIFICATION_PERMISSION_REQUESTED_KEY,
+                'true'
+              );
+
+              notificationsAllowed =
+                result ===
+                PermissionsAndroid.RESULTS.GRANTED;
+            }
+          }
         }
+
+        if (!notificationsAllowed) {
+          return;
+        }
+
+        if (currentPushToken) {
+          await registerPushToken(
+            currentPushToken,
+            profile
+          );
+
+          return;
+        }
+
+        const pushToken =
+          await getToken(firebaseMessaging);
+
+        if (!pushToken) {
+          return;
+        }
+
+        currentPushToken = pushToken;
+
+        await registerPushToken(
+          pushToken,
+          profile
+        );
+
+      } catch (error) {
+        console.log(
+          'Push notification setup error:',
+          error
+        );
+
+      } finally {
+        pushSetupInProgress = false;
       }
-
-      currentPushToken =
-        await getToken(firebaseMessaging);
-
-      await registerPushToken(
-        currentPushToken
-      );
     };
 
     const onSocketConnect = () => {
-      socket.emit(
-        'set-app-activity',
-        {
-          active: AppState.currentState === 'active',
-        }
-      );
+      void registerCurrentUser()
+        .then((profile) => {
+          if (!profile) {
+            return;
+          }
 
-      if (currentPushToken) {
-        void registerPushToken(
-          currentPushToken
-        );
-      }
+          socket.emit(
+            'set-app-activity',
+            {
+              active: AppState.currentState === 'active',
+            }
+          );
+
+          if (currentPushToken) {
+            void registerPushToken(
+              currentPushToken,
+              profile
+            );
+          }
+        })
+        .catch((error) => {
+          console.log(
+            'Socket registration error:',
+            error
+          );
+        });
     };
 
     const appStateSubscription =
@@ -205,9 +380,14 @@ export default function RootLayout() {
         firebaseMessaging,
         (pushToken) => {
           currentPushToken = pushToken;
+          registeredPushToken = '';
           void registerPushToken(pushToken);
         }
       );
+
+    const onUserRegistered = () => {
+      void setUpPushNotifications();
+    };
 
     const unsubscribeNotificationOpened =
       onNotificationOpenedApp(
@@ -216,6 +396,30 @@ export default function RootLayout() {
           void openFriendChatFromNotification(
             remoteMessage
           );
+        }
+      );
+
+    const unsubscribeForegroundMessage = onMessage(
+      firebaseMessaging,
+      (remoteMessage) => {
+        void showForegroundFriendMessageNotification(
+          remoteMessage
+        ).catch((error) => {
+          console.log(
+            'Foreground notification error:',
+            error
+          );
+        });
+      }
+    );
+
+    const notificationResponseSubscription =
+      Notifications.addNotificationResponseReceivedListener(
+        (response) => {
+          void openFriendChatFromNotification({
+            data:
+              response.notification.request.content.data,
+          });
         }
       );
 
@@ -230,15 +434,31 @@ export default function RootLayout() {
         }
       });
 
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) {
+          return openFriendChatFromNotification({
+            data:
+              response.notification.request.content.data,
+          });
+        }
+      });
+
     socket.on('connect', onSocketConnect);
-    onSocketConnect();
-    void setUpPushNotifications();
+    socket.on('user-registered', onUserRegistered);
+
+    if (socket.connected) {
+      onSocketConnect();
+    }
 
     return () => {
       appStateSubscription.remove();
       unsubscribeTokenRefresh();
       unsubscribeNotificationOpened();
+      unsubscribeForegroundMessage();
+      notificationResponseSubscription.remove();
       socket.off('connect', onSocketConnect);
+      socket.off('user-registered', onUserRegistered);
     };
   }, []);
 

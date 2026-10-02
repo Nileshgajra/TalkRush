@@ -1,12 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const COINS_KEY = 'talkrush_coins';
+const INITIAL_COINS = 2;
 
 export const getCoins = async (): Promise<number> => {
   const savedCoins = await AsyncStorage.getItem(COINS_KEY);
 
   if (savedCoins === null) {
-    return 0;
+    await AsyncStorage.setItem(
+      COINS_KEY,
+      String(INITIAL_COINS)
+    );
+
+    return INITIAL_COINS;
   }
 
   return Number(savedCoins);

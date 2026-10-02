@@ -16,8 +16,36 @@ const MessageSchema = new mongoose.Schema(
 
     text: {
       type: String,
-      required: true,
+      default: '',
       trim: true,
+    },
+
+    mediaType: {
+      type: String,
+      enum: ['image', 'video'],
+      default: undefined,
+    },
+
+    // Storage object key only. Download URLs are generated server-side for
+    // authorized chat delivery and are never persisted in MongoDB.
+    mediaPath: {
+      type: String,
+      default: '',
+    },
+
+    mediaContentType: {
+      type: String,
+      default: '',
+    },
+
+    mediaSize: {
+      type: Number,
+      default: 0,
+    },
+
+    mediaDuration: {
+      type: Number,
+      default: 0,
     },
 
     seen: {

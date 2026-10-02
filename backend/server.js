@@ -5,6 +5,8 @@ const FriendRequest = require('./models/FriendRequest');
 const Message = require('./models/Message');
 const Report = require('./models/Report');
 const firebaseAdmin = require('firebase-admin');
+const { createClient } = require('@supabase/supabase-js');
+const { randomUUID } = require('crypto');
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -43,6 +45,56 @@ const pairs = {};
 // =========================
 
 const onlineUsers = {};
+let connectionSequence = 0;
+
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_VIDEO_DURATION_SECONDS = 60;
+const MEDIA_UPLOAD_TTL_MS = 15 * 60 * 1000;
+const MEDIA_DOWNLOAD_TTL_MS = 60 * 60 * 1000;
+
+const ALLOWED_MEDIA_TYPES = {
+  image: new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  ]),
+  video: new Set([
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+  ]),
+};
+
+function isUserOnline(userId) {
+  const socketId = onlineUsers[userId];
+  const userSocket =
+    socketId && io.sockets.sockets.get(socketId);
+
+  if (!userSocket) {
+    if (socketId) {
+      delete onlineUsers[userId];
+    }
+
+    return false;
+  }
+
+  return userSocket.isAppActive !== false;
+}
+
+function emitPresence(userId) {
+  if (!userId) {
+    return;
+  }
+
+  io.emit(
+    'presence-updated',
+    {
+      userId,
+      online: isUserOnline(userId),
+    }
+  );
+}
 
 // =========================
 // FIREBASE CLOUD MESSAGING
@@ -78,6 +130,31 @@ function getFirebaseMessaging() {
   }
 }
 
+function getSupabaseStorage() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const bucketName =
+    process.env.SUPABASE_STORAGE_BUCKET;
+
+  if (!supabaseUrl || !serviceRoleKey || !bucketName) {
+    return null;
+  }
+
+  return {
+    bucket: createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    ).storage.from(bucketName),
+  };
+}
+
 // =========================
 // HELPER FUNCTIONS
 // =========================
@@ -93,6 +170,17 @@ function removeFromAllQueues(socketId) {
 
   randomQueue = randomQueue.filter(
     (u) => u.socketId !== socketId
+  );
+}
+
+function isSocketSearching(socketId) {
+  const queuedSocket =
+    io.sockets.sockets.get(socketId);
+
+  return Boolean(
+    queuedSocket &&
+    queuedSocket.isSearching &&
+    !pairs[socketId]
   );
 }
 
@@ -170,6 +258,160 @@ async function getChatHistory(userA, userB) {
     .lean();
 }
 
+function getMediaValidationError(media) {
+  if (!media || typeof media !== 'object') {
+    return 'Invalid media attachment.';
+  }
+
+  const {
+    type,
+    contentType,
+    size,
+    duration,
+  } = media;
+
+  if (!ALLOWED_MEDIA_TYPES[type]?.has(contentType)) {
+    return 'Only JPG, PNG, WEBP, MP4, MOV, and WEBM files are supported.';
+  }
+
+  if (!Number.isInteger(size) || size <= 0) {
+    return 'Could not verify the media file size.';
+  }
+
+  if (
+    type === 'image' &&
+    size > MAX_IMAGE_SIZE_BYTES
+  ) {
+    return 'Photos must be 10 MB or smaller.';
+  }
+
+  if (
+    type === 'video' &&
+    size > MAX_VIDEO_SIZE_BYTES
+  ) {
+    return 'Videos must be 25 MB or smaller.';
+  }
+
+  if (
+    type === 'video' &&
+    (!Number.isFinite(duration) ||
+      duration < 0 ||
+      duration > MAX_VIDEO_DURATION_SECONDS)
+  ) {
+    return 'Videos must be 60 seconds or shorter.';
+  }
+
+  return '';
+}
+
+function getMediaFileExtension(contentType) {
+  return {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'video/webm': 'webm',
+  }[contentType] || 'bin';
+}
+
+async function getMediaDownloadUrl(mediaPath) {
+  const storage = getSupabaseStorage();
+
+  if (!storage || !mediaPath) {
+    return '';
+  }
+
+  try {
+    const {
+      data,
+      error,
+    } = await storage.bucket.createSignedUrl(
+      mediaPath,
+      MEDIA_DOWNLOAD_TTL_MS / 1000
+    );
+
+    if (error || !data?.signedUrl) {
+      throw error || new Error('No signed media URL returned.');
+    }
+
+    return data.signedUrl;
+
+  } catch (error) {
+    console.error(
+      'Media download URL error:',
+      error?.code || 'unknown error'
+    );
+
+    return '';
+  }
+}
+
+async function toMessageData(message) {
+  return {
+    id: message._id?.toString() || message.id,
+    senderId: message.senderId,
+    receiverId: message.receiverId,
+    text: message.text || '',
+    mediaType: message.mediaType || '',
+    mediaPath: message.mediaPath || '',
+    mediaContentType: message.mediaContentType || '',
+    mediaSize: message.mediaSize || 0,
+    mediaDuration: message.mediaDuration || 0,
+    mediaUrl: message.mediaPath
+      ? await getMediaDownloadUrl(message.mediaPath)
+      : '',
+    seen: message.seen,
+    createdAt: message.createdAt,
+  };
+}
+
+async function consumePendingMediaUpload(socket, mediaPath) {
+  const pending =
+    socket.pendingMediaUploads?.get(mediaPath);
+
+  if (!pending || pending.expiresAt < Date.now()) {
+    if (pending) {
+      socket.pendingMediaUploads.delete(mediaPath);
+    }
+
+    return null;
+  }
+
+  const storage = getSupabaseStorage();
+
+  if (!storage) {
+    return null;
+  }
+
+  try {
+    const {
+      data: metadata,
+      error,
+    } = await storage.bucket.info(mediaPath);
+
+    if (
+      error ||
+      !metadata ||
+      metadata.contentType !== pending.contentType ||
+      Number(metadata.size) !== pending.size
+    ) {
+      return null;
+    }
+
+    socket.pendingMediaUploads.delete(mediaPath);
+    return pending;
+
+  } catch (error) {
+    console.error(
+      'Media upload verification error:',
+      error?.code || 'unknown error'
+    );
+
+    return null;
+  }
+}
+
 async function sendFriendMessageNotification(
   receiver,
   sender,
@@ -180,7 +422,8 @@ async function sendFriendMessageNotification(
 
   if (
     !firebaseMessaging ||
-    !receiver?.pushToken
+    !receiver?.pushToken ||
+    receiver.userId === sender?.userId
   ) {
     return;
   }
@@ -205,13 +448,18 @@ async function sendFriendMessageNotification(
 
       android: {
         priority: 'high',
+
+        notification: {
+          channelId: 'friend-messages',
+          sound: 'default',
+        },
       },
     });
 
   } catch (error) {
     console.error(
       'Friend message notification error:',
-      error
+      error?.code || 'unknown error'
     );
 
     if (
@@ -312,7 +560,8 @@ async function findEligiblePartner(
 
     if (
       !candidate ||
-      candidate.socketId === currentSocketId
+      candidate.socketId === currentSocketId ||
+      !isSocketSearching(candidate.socketId)
     ) {
       continue;
     }
@@ -338,6 +587,16 @@ async function findEligiblePartner(
         candidateUserId
       );
 
+      if (isSocketSearching(candidate.socketId)) {
+        queue.push(candidate);
+      }
+
+      continue;
+    }
+
+    // The database lookup above yields to the event loop. The candidate may
+    // have cancelled, disconnected, or matched while it was in progress.
+    if (!isSocketSearching(candidate.socketId)) {
       continue;
     }
 
@@ -347,7 +606,9 @@ async function findEligiblePartner(
         candidate.userData
       )
     ) {
-      queue.push(candidate);
+      if (isSocketSearching(candidate.socketId)) {
+        queue.push(candidate);
+      }
       continue;
     }
 
@@ -365,6 +626,10 @@ io.on(
   'connection',
   (socket) => {
     socket.isAppActive = true;
+    socket.activeFriendChatWith = '';
+    socket.pendingMediaUploads = new Map();
+    socket.connectionOrder =
+      connectionSequence += 1;
 
     console.log(
       'User Connected:',
@@ -382,6 +647,24 @@ io.on(
           if (
             !userData ||
             !userData.userId
+          ) {
+            return;
+          }
+
+          const currentSocketId =
+            onlineUsers[userData.userId];
+
+          const currentSocket =
+            currentSocketId &&
+            currentSocketId !== socket.id
+              ? io.sockets.sockets.get(currentSocketId)
+              : null;
+
+          // An older connection can finish an in-flight registration after a
+          // reconnection has already become the user's active socket.
+          if (
+            currentSocket &&
+            currentSocket.connectionOrder > socket.connectionOrder
           ) {
             return;
           }
@@ -422,6 +705,8 @@ io.on(
             userData.userId
           ] = socket.id;
 
+          emitPresence(userData.userId);
+
           await User.findOneAndUpdate(
             {
               userId:
@@ -453,6 +738,13 @@ io.on(
           console.log(
             'User Registered:',
             userData.userId
+          );
+
+          socket.emit(
+            'user-registered',
+            {
+              userId: userData.userId,
+            }
           );
 
         } catch (error) {
@@ -535,10 +827,31 @@ io.on(
       ({
         active,
       }) => {
-        if (socket.userId) {
+        if (
+          socket.userId &&
+          onlineUsers[socket.userId] === socket.id
+        ) {
           socket.isAppActive =
             Boolean(active);
+
+          emitPresence(socket.userId);
         }
+      }
+    );
+
+    // ==================================================
+    // ACTIVE FRIEND CHAT
+    // ==================================================
+
+    socket.on(
+      'set-active-friend-chat',
+      ({
+        friendId,
+      }) => {
+        socket.activeFriendChatWith =
+          typeof friendId === 'string'
+            ? friendId
+            : '';
       }
     );
 
@@ -556,9 +869,7 @@ io.on(
           {
             userId,
             online:
-              Boolean(
-                onlineUsers[userId]
-              ),
+              isUserOnline(userId),
           }
         );
       }
@@ -578,6 +889,12 @@ io.on(
             userData
           );
 
+          // React effects can emit this event more than once. One socket may
+          // have only one in-flight search.
+          if (socket.isSearching) {
+            return;
+          }
+
           if (
             !userData ||
             !userData.userId
@@ -588,6 +905,8 @@ io.on(
 
             return;
           }
+
+          socket.isSearching = true;
 
           // Remove this user from
           // every queue first.
@@ -679,6 +998,23 @@ io.on(
             partner.socketId !==
               socket.id
           ) {
+            // Do not pair a socket that left the queue while the blocked-user
+            // lookup was pending.
+            if (!isSocketSearching(partner.socketId)) {
+              socket.isSearching = false;
+              socket.emit('searching');
+              return;
+            }
+
+            socket.isSearching = false;
+
+            const partnerSocket =
+              io.sockets.sockets.get(
+                partner.socketId
+              );
+
+            partnerSocket.isSearching = false;
+
             pairs[
               socket.id
             ] =
@@ -754,6 +1090,8 @@ io.on(
           );
 
         } catch (error) {
+          socket.isSearching = false;
+
           console.error(
             'Find Stranger Error:',
             error
@@ -771,6 +1109,150 @@ io.on(
     // ==================================================
 
     socket.on(
+      'request-media-upload',
+      async ({
+        chatType,
+        receiverId,
+        media,
+      }, callback) => {
+        const respond =
+          typeof callback === 'function'
+            ? callback
+            : () => {};
+
+        try {
+          if (!socket.userId || !receiverId) {
+            respond({
+              success: false,
+              message: 'This chat is no longer available.',
+            });
+            return;
+          }
+
+          const validationError =
+            getMediaValidationError(media);
+
+          if (validationError) {
+            respond({
+              success: false,
+              message: validationError,
+            });
+            return;
+          }
+
+          if (chatType === 'friend') {
+            const friends =
+              await areCurrentFriends(
+                socket.userId,
+                receiverId
+              );
+
+            const blocked =
+              await isBlockedBetween(
+                socket.userId,
+                receiverId
+              );
+
+            if (!friends || blocked) {
+              respond({
+                success: false,
+                message:
+                  'You can only share media with current friends.',
+              });
+              return;
+            }
+          } else if (chatType === 'random') {
+            const partnerSocket =
+              io.sockets.sockets.get(
+                pairs[socket.id]
+              );
+
+            if (
+              !partnerSocket ||
+              partnerSocket.userId !== receiverId
+            ) {
+              respond({
+                success: false,
+                message: 'Your chat partner is no longer available.',
+              });
+              return;
+            }
+          } else {
+            respond({
+              success: false,
+              message: 'Invalid chat type.',
+            });
+            return;
+          }
+
+          const storage = getSupabaseStorage();
+
+          if (!storage) {
+            respond({
+              success: false,
+              message:
+                'Media storage is not configured on the server.',
+            });
+            return;
+          }
+
+          const mediaPath = [
+            'chat-media',
+            encodeURIComponent(socket.userId),
+            `${Date.now()}-${randomUUID()}.${
+              getMediaFileExtension(media.contentType)
+            }`,
+          ].join('/');
+
+          const {
+            data: upload,
+            error: uploadError,
+          } = await storage.bucket.createSignedUploadUrl(
+            mediaPath
+          );
+
+          if (uploadError || !upload?.signedUrl) {
+            throw (
+              uploadError ||
+              new Error('No signed media upload URL returned.')
+            );
+          }
+
+          socket.pendingMediaUploads.set(
+            mediaPath,
+            {
+              chatType,
+              receiverId,
+              type: media.type,
+              contentType: media.contentType,
+              size: media.size,
+              duration: media.duration || 0,
+              expiresAt:
+                Date.now() + MEDIA_UPLOAD_TTL_MS,
+            }
+          );
+
+          respond({
+            success: true,
+            mediaPath,
+            uploadUrl: upload.signedUrl,
+          });
+
+        } catch (error) {
+          console.error(
+            'Media upload request error:',
+            error
+          );
+
+          respond({
+            success: false,
+            message: 'Could not prepare the media upload.',
+          });
+        }
+      }
+    );
+
+    socket.on(
       'message',
       (message) => {
         const partnerId =
@@ -782,6 +1264,88 @@ io.on(
           ).emit(
             'message',
             message
+          );
+        }
+      }
+    );
+
+    socket.on(
+      'media-message',
+      async ({
+        receiverId,
+        mediaPath,
+      }) => {
+        try {
+          const partnerId = pairs[socket.id];
+          const partnerSocket =
+            io.sockets.sockets.get(partnerId);
+
+          if (
+            !partnerSocket ||
+            partnerSocket.userId !== receiverId
+          ) {
+            socket.emit(
+              'media-message-error',
+              {
+                message: 'Your chat partner is no longer available.',
+              }
+            );
+            return;
+          }
+
+          const media =
+            await consumePendingMediaUpload(
+              socket,
+              mediaPath
+            );
+
+          if (
+            !media ||
+            media.chatType !== 'random' ||
+            media.receiverId !== receiverId
+          ) {
+            socket.emit(
+              'media-message-error',
+              {
+                message: 'The media upload could not be verified.',
+              }
+            );
+            return;
+          }
+
+          const messageData = {
+            id: `${Date.now()}-${randomUUID()}`,
+            senderId: socket.userId,
+            receiverId,
+            text: '',
+            mediaType: media.type,
+            mediaPath,
+            mediaContentType: media.contentType,
+            mediaSize: media.size,
+            mediaDuration: media.duration,
+            mediaUrl: await getMediaDownloadUrl(mediaPath),
+            createdAt: new Date(),
+          };
+
+          io.to(partnerId).emit(
+            'media-message',
+            messageData
+          );
+          socket.emit(
+            'media-message-sent',
+            messageData
+          );
+
+        } catch (error) {
+          console.error(
+            'Random media message error:',
+            error
+          );
+          socket.emit(
+            'media-message-error',
+            {
+              message: 'Could not send media.',
+            }
           );
         }
       }
@@ -805,6 +1369,13 @@ io.on(
             !text ||
             !text.trim()
           ) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message: 'Invalid friend message.',
+              }
+            );
+
             return;
           }
 
@@ -813,6 +1384,13 @@ io.on(
             socket.userId !==
             senderId
           ) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message: 'User verification failed.',
+              }
+            );
+
             return;
           }
 
@@ -833,6 +1411,13 @@ io.on(
             !sender ||
             !receiver
           ) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message: 'Friend profile not found.',
+              }
+            );
+
             return;
           }
 
@@ -884,23 +1469,8 @@ io.on(
               seen: false,
             });
 
-          const messageData = {
-            id:
-              savedMessage._id.toString(),
-
-            senderId,
-
-            receiverId,
-
-            text:
-              savedMessage.text,
-
-            seen:
-              savedMessage.seen,
-
-            createdAt:
-              savedMessage.createdAt,
-          };
+          const messageData =
+            await toMessageData(savedMessage);
 
           // Deliver immediately if
           // receiver is online.
@@ -927,7 +1497,10 @@ io.on(
                 )
               : null;
 
-          if (!receiverSocket?.isAppActive) {
+          if (
+            !receiverSocket?.isAppActive ||
+            receiverSocket.activeFriendChatWith !== senderId
+          ) {
             void sendFriendMessageNotification(
               receiver,
               sender,
@@ -953,6 +1526,143 @@ io.on(
           console.error(
             'Friend Message Error:',
             error
+          );
+
+          socket.emit(
+            'friend-message-error',
+            {
+              message: 'Could not send message.',
+            }
+          );
+        }
+      }
+    );
+
+    socket.on(
+      'friend-media-message',
+      async ({
+        senderId,
+        receiverId,
+        mediaPath,
+      }) => {
+        try {
+          if (
+            !senderId ||
+            !receiverId ||
+            !mediaPath ||
+            socket.userId !== senderId
+          ) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message: 'Invalid friend media message.',
+              }
+            );
+            return;
+          }
+
+          const sender = await User.findOne({
+            userId: senderId,
+          });
+          const receiver = await User.findOne({
+            userId: receiverId,
+          });
+          const friends = await areCurrentFriends(
+            senderId,
+            receiverId
+          );
+          const blocked = await isBlockedBetween(
+            senderId,
+            receiverId
+          );
+
+          if (!sender || !receiver || !friends || blocked) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message:
+                  'You can only share media with current friends.',
+              }
+            );
+            return;
+          }
+
+          const media =
+            await consumePendingMediaUpload(
+              socket,
+              mediaPath
+            );
+
+          if (
+            !media ||
+            media.chatType !== 'friend' ||
+            media.receiverId !== receiverId
+          ) {
+            socket.emit(
+              'friend-message-error',
+              {
+                message: 'The media upload could not be verified.',
+              }
+            );
+            return;
+          }
+
+          const savedMessage = await Message.create({
+            senderId,
+            receiverId,
+            text: '',
+            mediaType: media.type,
+            mediaPath,
+            mediaContentType: media.contentType,
+            mediaSize: media.size,
+            mediaDuration: media.duration,
+            seen: false,
+          });
+
+          const messageData =
+            await toMessageData(savedMessage);
+          const receiverSocketId =
+            onlineUsers[receiverId];
+
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit(
+              'friend-message',
+              messageData
+            );
+          }
+
+          const receiverSocket = receiverSocketId
+            ? io.sockets.sockets.get(receiverSocketId)
+            : null;
+
+          if (
+            !receiverSocket?.isAppActive ||
+            receiverSocket.activeFriendChatWith !== senderId
+          ) {
+            void sendFriendMessageNotification(
+              receiver,
+              sender,
+              media.type === 'image'
+                ? '📷 Photo'
+                : '🎥 Video'
+            );
+          }
+
+          socket.emit(
+            'friend-message-sent',
+            messageData
+          );
+
+        } catch (error) {
+          console.error(
+            'Friend media message error:',
+            error
+          );
+          socket.emit(
+            'friend-message-error',
+            {
+              message: 'Could not send media.',
+            }
           );
         }
       }
@@ -1013,6 +1723,52 @@ io.on(
               friendId
             );
 
+          const unreadMessageIds =
+            history
+              .filter(
+                (message) =>
+                  message.senderId === friendId &&
+                  message.receiverId === userId &&
+                  !message.seen
+              )
+              .map(
+                (message) => {
+                  message.seen = true;
+                  return message._id;
+                }
+              );
+
+          if (unreadMessageIds.length > 0) {
+            await Message.updateMany(
+              {
+                _id: {
+                  $in: unreadMessageIds,
+                },
+              },
+              {
+                $set: {
+                  seen: true,
+                },
+              }
+            );
+
+            const senderSocketId =
+              onlineUsers[friendId];
+
+            if (senderSocketId) {
+              io.to(senderSocketId).emit(
+                'friend-message-seen',
+                {
+                  messageIds:
+                    unreadMessageIds.map(
+                      (messageId) =>
+                        messageId.toString()
+                    ),
+                }
+              );
+            }
+          }
+
           socket.emit(
             'chat-history',
             {
@@ -1021,26 +1777,8 @@ io.on(
               friendId,
 
               messages:
-                history.map(
-                  (message) => ({
-                    id:
-                      message._id.toString(),
-
-                    senderId:
-                      message.senderId,
-
-                    receiverId:
-                      message.receiverId,
-
-                    text:
-                      message.text,
-
-                    seen:
-                      message.seen,
-
-                    createdAt:
-                      message.createdAt,
-                  })
+                await Promise.all(
+                  history.map(toMessageData)
                 ),
             }
           );
@@ -1268,6 +2006,8 @@ io.on(
     socket.on(
       'disconnect-partner',
       () => {
+        socket.isSearching = false;
+
         const partnerId =
           pairs[socket.id];
 
@@ -1676,11 +2416,7 @@ io.on(
                   friend.gender,
 
                 online:
-                  Boolean(
-                    onlineUsers[
-                      friend.userId
-                    ]
-                  ),
+                  isUserOnline(friend.userId),
               })
             );
 
@@ -2164,6 +2900,29 @@ io.on(
               $pull: {
                 friends:
                   userId,
+              },
+            }
+          );
+
+          // Do not allow an older pending request between these users to
+          // recreate the friendship after either side removes it.
+          await FriendRequest.updateMany(
+            {
+              status: 'pending',
+              $or: [
+                {
+                  fromUserId: userId,
+                  toUserId: friendId,
+                },
+                {
+                  fromUserId: friendId,
+                  toUserId: userId,
+                },
+              ],
+            },
+            {
+              $set: {
+                status: 'rejected',
               },
             }
           );
@@ -2836,10 +3595,17 @@ blockedUsers: []
     socket.on(
       'disconnect',
       () => {
+        socket.isSearching = false;
+
         console.log(
           'Disconnected:',
           socket.id
         );
+
+        let disconnectedUserId =
+          socket.userId;
+
+        let presenceChanged = false;
 
         // Remove online user
         if (
@@ -2851,6 +3617,8 @@ blockedUsers: []
           delete onlineUsers[
             socket.userId
           ];
+
+          presenceChanged = true;
         } else {
           for (
             const userId in onlineUsers
@@ -2864,9 +3632,16 @@ blockedUsers: []
                 userId
               ];
 
+              disconnectedUserId = userId;
+              presenceChanged = true;
+
               break;
             }
           }
+        }
+
+        if (presenceChanged) {
+          emitPresence(disconnectedUserId);
         }
 
         // Remove queues
