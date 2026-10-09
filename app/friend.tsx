@@ -398,7 +398,7 @@ export default function FriendScreen() {
             >
               <ActivityIndicator
                 size="small"
-                color="#FF4F81"
+                color="#FF6B91"
               />
 
               <Text
@@ -772,7 +772,7 @@ export default function FriendScreen() {
               <Text
                 style={styles.navText}
               >
-                Settings
+                Profile
               </Text>
             </TouchableOpacity>
 
@@ -788,21 +788,21 @@ const styles = StyleSheet.create({
 
   safeArea: {
     flex: 1,
-    backgroundColor: '#12070D',
+    backgroundColor: '#16070D',
   },
 
   screen: {
     flex: 1,
-    backgroundColor: '#12070D',
+    backgroundColor: '#16070D',
   },
 
   scrollContent: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingTop:
       Platform.OS === 'android'
-        ? 18
-        : 12,
-    paddingBottom: 20,
+        ? 26
+        : 18,
+    paddingBottom: 24,
   },
 
   header: {
@@ -817,91 +817,112 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    color: '#FFF7FB',
-    fontSize: 28,
+    color: '#FFF9FB',
+    fontSize: 30,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: -0.3,
   },
 
   subtitle: {
-    color: '#A995A1',
-    fontSize: 13,
-    marginTop: 4,
+    color: '#C6AAB5',
+    fontSize: 13.5,
+    marginTop: 5,
   },
 
   heartCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#29101B',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#401226',
     borderWidth: 1,
-    borderColor: '#4A1D30',
+    borderColor: '#71314B',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 10,
   },
 
   heart: {
-    color: '#FF4F81',
+    color: '#FF6B91',
     fontSize: 22,
   },
 
   loading: {
     alignItems: 'center',
-    marginTop: 55,
+    marginTop: 52,
+    paddingVertical: 22,
+    borderRadius: 22,
+    backgroundColor: '#260D18',
+    borderWidth: 1,
+    borderColor: '#542033',
   },
 
   loadingText: {
-    color: '#A995A1',
+    color: '#C6AAB5',
     fontSize: 13,
     marginTop: 8,
   },
 
   section: {
-    marginTop: 26,
+    marginTop: 30,
   },
 
   sectionTitle: {
-    color: '#FFF7FB',
-    fontSize: 18,
+    color: '#FFF9FB',
+    fontSize: 19,
     fontWeight: '800',
     marginBottom: 10,
   },
 
   requestCard: {
-    backgroundColor: '#1B0C14',
+    backgroundColor: '#32101F',
     borderWidth: 1,
-    borderColor: '#64213D',
-    borderRadius: 18,
-    padding: 13,
+    borderColor: '#8A3655',
+    borderRadius: 22,
+    padding: 14,
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#080204',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   friendCard: {
-    backgroundColor: '#1B0C14',
+    backgroundColor: '#260D18',
     borderWidth: 1,
-    borderColor: '#38202B',
-    borderRadius: 18,
-    padding: 13,
+    borderColor: '#542033',
+    borderRadius: 22,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    shadowColor: '#080204',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#3A1425',
-    borderWidth: 1,
-    borderColor: '#FF4F81',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#50152C',
+    borderWidth: 2,
+    borderColor: '#FF789A',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   avatarText: {
-    color: '#FF4F81',
+    color: '#FFF4F7',
     fontSize: 21,
     fontWeight: '800',
   },
@@ -912,28 +933,28 @@ const styles = StyleSheet.create({
   },
 
   userName: {
-    color: '#FFF7FB',
+    color: '#FFF9FB',
     fontSize: 16,
     fontWeight: '800',
   },
 
   userDetails: {
-    color: '#A995A1',
+    color: '#C6AAB5',
     fontSize: 12,
     marginTop: 3,
   },
 
   requestButtons: {
     flexDirection: 'row',
-    marginTop: 9,
+    marginTop: 11,
   },
 
   acceptButton: {
-    backgroundColor: '#FF4F81',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 10,
-    marginRight: 7,
+    backgroundColor: '#F34C7A',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginRight: 8,
   },
 
   acceptText: {
@@ -943,25 +964,25 @@ const styles = StyleSheet.create({
   },
 
   rejectButton: {
-    backgroundColor: '#29101B',
+    backgroundColor: '#401226',
     borderWidth: 1,
-    borderColor: '#4A1D30',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 10,
+    borderColor: '#71314B',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
 
   rejectText: {
-    color: '#A995A1',
+    color: '#E0C6CF',
     fontSize: 12,
     fontWeight: '700',
   },
 
   chatButton: {
-    backgroundColor: '#FF4F81',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 11,
+    backgroundColor: '#F34C7A',
+    paddingHorizontal: 17,
+    paddingVertical: 10,
+    borderRadius: 13,
   },
 
   chatButtonText: {
@@ -972,34 +993,34 @@ const styles = StyleSheet.create({
 
   emptyContainer: {
     alignItems: 'center',
-    marginTop: 68,
+    marginTop: 62,
   },
 
   emptyIcon: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: '#29101B',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#401226',
     borderWidth: 1,
-    borderColor: '#4A1D30',
+    borderColor: '#71314B',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   emptyHeart: {
-    color: '#FF4F81',
+    color: '#FF6B91',
     fontSize: 40,
   },
 
   emptyTitle: {
-    color: '#FFF7FB',
+    color: '#FFF9FB',
     fontSize: 23,
     fontWeight: '800',
     marginTop: 17,
   },
 
   emptyText: {
-    color: '#A995A1',
+    color: '#C6AAB5',
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: 'center',
@@ -1011,8 +1032,16 @@ const styles = StyleSheet.create({
     height: 52,
     minWidth: 245,
     paddingHorizontal: 24,
-    borderRadius: 16,
-    backgroundColor: '#FF4F81',
+    borderRadius: 18,
+    backgroundColor: '#F34C7A',
+    shadowColor: '#F34C7A',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1032,7 +1061,7 @@ const styles = StyleSheet.create({
   },
 
   bottomSafeArea: {
-    backgroundColor: '#180A11',
+    backgroundColor: '#1B0911',
     paddingBottom:
       Platform.OS === 'android'
         ? 8
@@ -1040,10 +1069,10 @@ const styles = StyleSheet.create({
   },
 
   bottomNav: {
-    height: 64,
-    backgroundColor: '#180A11',
+    height: 68,
+    backgroundColor: '#1B0911',
     borderTopWidth: 1,
-    borderTopColor: '#38202B',
+    borderTopColor: '#542033',
     flexDirection: 'row',
     justifyContent:
       'space-around',
@@ -1058,25 +1087,25 @@ const styles = StyleSheet.create({
 
   navIcon: {
     fontSize: 23,
-    color: '#806D79',
+    color: '#9F7181',
   },
 
   navIconActive: {
     fontSize: 23,
-    color: '#FF4F81',
+    color: '#FF668B',
   },
 
   navText: {
     marginTop: 3,
     fontSize: 11,
-    color: '#806D79',
+    color: '#9F7181',
     fontWeight: '600',
   },
 
   navTextActive: {
     marginTop: 3,
     fontSize: 11,
-    color: '#FF4F81',
+    color: '#FF668B',
     fontWeight: '800',
   },
 

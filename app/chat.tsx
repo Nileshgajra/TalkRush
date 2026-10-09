@@ -20,6 +20,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
@@ -634,6 +635,7 @@ export default function ChatScreen() {
     socket.off('media-message');
     socket.off('media-message-sent');
     socket.off('media-message-error');
+    socket.off('media-expired');
 
     socket.off(
       'friend-message'
@@ -924,6 +926,9 @@ export default function ChatScreen() {
                 mediaPath:
                   data.mediaPath,
 
+                mediaExpired:
+                  Boolean(data.mediaExpired),
+
                 sender:
                   'other',
 
@@ -1028,6 +1033,9 @@ export default function ChatScreen() {
                 mediaPath:
                   data.mediaPath,
 
+                mediaExpired:
+                  Boolean(data.mediaExpired),
+
                 sender:
                   'me',
 
@@ -1129,6 +1137,9 @@ export default function ChatScreen() {
 
               mediaPath:
                 item.mediaPath,
+
+              mediaExpired:
+                Boolean(item.mediaExpired),
 
               sender:
                 item.senderId ===
@@ -1416,6 +1427,17 @@ export default function ChatScreen() {
 
       }
     );
+
+    socket.on('media-expired', ({ messageId }) => {
+      if (!messageId) return;
+      setMessages((previous) =>
+        previous.map((item) =>
+          item.id === messageId
+            ? { ...item, mediaUrl: '', mediaExpired: true }
+            : item
+        )
+      );
+    });
 
 
     // ==================================================
@@ -1760,6 +1782,7 @@ export default function ChatScreen() {
       socket.off('media-message');
       socket.off('media-message-sent');
       socket.off('media-message-error');
+      socket.off('media-expired');
 
       socket.off(
         'friend-message'
@@ -2892,7 +2915,7 @@ export default function ChatScreen() {
         'Searching'
       ) {
 
-        return '#00E0FF';
+        return '#FF6B91';
 
       }
 
@@ -2902,7 +2925,7 @@ export default function ChatScreen() {
         'Offline'
       ) {
 
-        return '#64748B';
+        return '#A77D8C';
 
       }
 
@@ -2986,11 +3009,12 @@ export default function ChatScreen() {
       }
     >
 
-      <View
-        style={
-          styles.container
-        }
-      >
+      <SafeAreaView style={styles.safeArea}>
+        <View
+          style={
+            styles.container
+          }
+        >
 
         {/* =========================
             HEADER
@@ -3238,7 +3262,9 @@ export default function ChatScreen() {
                 ]}
               >
                 {item.mediaType === 'image' && (
-                  item.mediaUrl ? (
+                  item.mediaExpired ? (
+                    <Text style={styles.mediaUnavailable}>Media expired</Text>
+                  ) : item.mediaUrl ? (
                     <Image
                       source={{ uri: item.mediaUrl }}
                       style={styles.mediaImage}
@@ -3252,7 +3278,9 @@ export default function ChatScreen() {
                 )}
 
                 {item.mediaType === 'video' && (
-                  item.mediaUrl ? (
+                  item.mediaExpired ? (
+                    <Text style={styles.mediaUnavailable}>Media expired</Text>
+                  ) : item.mediaUrl ? (
                     <ChatVideo uri={item.mediaUrl} />
                   ) : (
                     <Text style={styles.mediaUnavailable}>
@@ -3293,7 +3321,7 @@ export default function ChatScreen() {
 
             <ActivityIndicator
               size="small"
-              color="#00E0FF"
+              color="#FF6B91"
             />
 
             <Text
@@ -3458,7 +3486,7 @@ export default function ChatScreen() {
                 : 'Type message...'
             }
 
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#A77D8C"
 
             style={
               styles.input
@@ -3511,7 +3539,8 @@ export default function ChatScreen() {
 
         </View>
 
-      </View>
+        </View>
+      </SafeAreaView>
 
 
       {/* ==================================================
@@ -3883,23 +3912,28 @@ const styles =
       flex: 1,
     },
 
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        '#16070D',
+    },
 
     container: {
       flex: 1,
       backgroundColor:
-        '#020617',
+        '#16070D',
     },
 
 
     header: {
-      paddingTop: 14,
-      paddingBottom: 12,
+      paddingTop: 16,
+      paddingBottom: 14,
       alignItems: 'center',
       borderBottomWidth: 1,
       borderBottomColor:
-        '#0F172A',
+        '#542033',
       backgroundColor:
-        '#030712',
+        '#260D18',
     },
 
 
@@ -3908,7 +3942,10 @@ const styles =
       height: 52,
       borderRadius: 100,
       backgroundColor:
-        '#16C6E5',
+        '#F34C7A',
+      borderWidth: 2,
+      borderColor:
+        '#FF91AC',
       justifyContent:
         'center',
       alignItems:
@@ -3926,15 +3963,15 @@ const styles =
 
 
     name: {
-      color: 'white',
-      fontSize: 18,
+      color: '#FFF9FB',
+      fontSize: 19,
       fontWeight:
         '700',
     },
 
 
     gender: {
-      color: '#94A3B8',
+      color: '#C6AAB5',
       fontSize: 14,
       marginTop: 2,
     },
@@ -3958,7 +3995,7 @@ const styles =
 
 
     statusText: {
-      color: '#CBD5E1',
+      color: '#E0C6CF',
       fontSize: 14,
       fontWeight:
         '600',
@@ -3980,7 +4017,7 @@ const styles =
 
     friendButton: {
       backgroundColor:
-        '#16C6E5',
+        '#F34C7A',
       paddingHorizontal: 22,
       paddingVertical: 9,
       borderRadius: 18,
@@ -3989,13 +4026,13 @@ const styles =
 
     friendButtonSent: {
       backgroundColor:
-        '#334155',
+        '#6C4051',
     },
 
 
     friendButtonDone: {
       backgroundColor:
-        '#22C55E',
+        '#3C805B',
     },
 
 
@@ -4013,7 +4050,10 @@ const styles =
       height: 38,
       borderRadius: 19,
       backgroundColor:
-        '#111827',
+        '#401226',
+      borderWidth: 1,
+      borderColor:
+        '#71314B',
       justifyContent:
         'center',
       alignItems:
@@ -4040,10 +4080,10 @@ const styles =
       padding: 16,
       borderRadius: 18,
       backgroundColor:
-        '#111827',
+        '#35101D',
       borderWidth: 1,
       borderColor:
-        '#7F1D1D',
+        '#A63D5D',
     },
 
 
@@ -4056,7 +4096,7 @@ const styles =
 
 
     leftText: {
-      color: '#94A3B8',
+      color: '#D6B4C0',
       fontSize: 13,
       marginTop: 5,
     },
@@ -4068,37 +4108,47 @@ const styles =
 
     chatContainer: {
       paddingHorizontal: 16,
-      paddingTop: 20,
-      paddingBottom: 120,
+      paddingTop: 18,
+      paddingBottom: 116,
     },
 
 
     messageBubble: {
       maxWidth: '78%',
-      paddingHorizontal: 18,
-      paddingVertical: 14,
-      borderRadius: 24,
-      marginBottom: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 22,
+      marginBottom: 10,
     },
 
 
     myMessage: {
       backgroundColor:
-        '#16C6E5',
+        '#C83E68',
       alignSelf:
         'flex-end',
       borderBottomRightRadius:
         6,
+      shadowColor: '#080204',
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+      shadowOpacity: 0.18,
+      shadowRadius: 5,
+      elevation: 2,
     },
 
 
     otherMessage: {
       backgroundColor:
-        '#111827',
+        '#310E1D',
       alignSelf:
         'flex-start',
       borderBottomLeftRadius:
         6,
+      borderWidth: 1,
+      borderColor: '#542033',
     },
 
 
@@ -4111,18 +4161,18 @@ const styles =
     mediaImage: {
       width: 220,
       height: 220,
-      borderRadius: 14,
+      borderRadius: 15,
     },
 
     mediaVideo: {
       width: 220,
       height: 180,
       borderRadius: 14,
-      backgroundColor: '#020617',
+      backgroundColor: '#18070E',
     },
 
     mediaUnavailable: {
-      color: '#CBD5E1',
+      color: '#E0C6CF',
       fontSize: 14,
     },
 
@@ -4138,14 +4188,14 @@ const styles =
 
 
     typingText: {
-      color: '#94A3B8',
+      color: '#C6AAB5',
       marginLeft: 8,
       fontSize: 13,
     },
 
 
     seenText: {
-      color: '#64748B',
+      color: '#A77D8C',
       textAlign:
         'right',
       marginRight: 18,
@@ -4158,7 +4208,7 @@ const styles =
       alignItems:
         'center',
       backgroundColor:
-        '#020617',
+        '#16070D',
       paddingVertical: 4,
     },
 
@@ -4167,9 +4217,9 @@ const styles =
       marginBottom: 8,
       padding: 8,
       borderRadius: 14,
-      backgroundColor: '#111827',
+      backgroundColor: '#310E1D',
       borderWidth: 1,
-      borderColor: '#1E3A5F',
+      borderColor: '#71314B',
       flexDirection: 'row',
       alignItems: 'center',
     },
@@ -4184,7 +4234,7 @@ const styles =
       width: 110,
       height: 72,
       borderRadius: 10,
-      backgroundColor: '#020617',
+      backgroundColor: '#18070E',
     },
 
     mediaPreviewActions: {
@@ -4193,7 +4243,7 @@ const styles =
     },
 
     mediaPreviewText: {
-      color: '#E2E8F0',
+      color: '#FFF4F7',
       fontSize: 13,
       marginBottom: 8,
     },
@@ -4203,7 +4253,7 @@ const styles =
       paddingVertical: 5,
       paddingHorizontal: 9,
       borderRadius: 8,
-      backgroundColor: '#7F1D1D',
+      backgroundColor: '#7D2340',
     },
 
     mediaCancelText: {
@@ -4216,14 +4266,16 @@ const styles =
       width: 36,
       height: 42,
       marginLeft: 8,
-      borderRadius: 10,
+      borderRadius: 13,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#1E3A5F',
+      backgroundColor: '#401226',
+      borderWidth: 1,
+      borderColor: '#71314B',
     },
 
     mediaButtonText: {
-      color: '#00E0FF',
+      color: '#FFB1C2',
       fontSize: 24,
       fontWeight: '500',
       lineHeight: 27,
@@ -4240,15 +4292,17 @@ const styles =
       paddingBottom: 18,
       borderTopWidth: 1,
       borderTopColor:
-        '#0F172A',
+        '#542033',
       backgroundColor:
-        '#020617',
+        '#1B0911',
     },
 
 
     nextButton: {
       backgroundColor:
-        '#111827',
+        '#401226',
+      borderWidth: 1,
+      borderColor: '#71314B',
       paddingHorizontal: 16,
       paddingVertical: 14,
       borderRadius: 18,
@@ -4267,8 +4321,10 @@ const styles =
     input: {
       flex: 1,
       backgroundColor:
-        '#111827',
-      color: 'white',
+        '#2A0D19',
+      color: '#FFF9FB',
+      borderWidth: 1,
+      borderColor: '#613047',
       borderRadius: 18,
       paddingHorizontal: 16,
       paddingVertical: 13,
@@ -4282,7 +4338,7 @@ const styles =
 
     sendButton: {
       backgroundColor:
-        '#16C6E5',
+        '#F34C7A',
       paddingHorizontal: 20,
       paddingVertical: 14,
       borderRadius: 18,
@@ -4290,7 +4346,7 @@ const styles =
 
 
     sendText: {
-      color: '#000',
+      color: '#FFFFFF',
       fontWeight:
         '700',
       fontSize: 15,
@@ -4304,7 +4360,7 @@ const styles =
     modalOverlay: {
       flex: 1,
       backgroundColor:
-        'rgba(0,0,0,0.7)',
+        'rgba(18,4,10,0.82)',
       justifyContent:
         'center',
       alignItems:
@@ -4315,9 +4371,11 @@ const styles =
     actionModal: {
       width: '85%',
       backgroundColor:
-        '#081225',
+        '#2B0D1A',
       borderRadius: 26,
       padding: 24,
+      borderWidth: 1,
+      borderColor: '#71314B',
     },
 
 
@@ -4336,7 +4394,7 @@ const styles =
       paddingVertical: 15,
       borderBottomWidth: 1,
       borderBottomColor:
-        '#1E293B',
+        '#542033',
     },
 
 
@@ -4364,7 +4422,7 @@ const styles =
       marginTop: 14,
       paddingVertical: 13,
       backgroundColor:
-        '#1E293B',
+        '#401226',
       borderRadius: 16,
     },
 
@@ -4382,9 +4440,11 @@ const styles =
     reportModal: {
       width: '88%',
       backgroundColor:
-        '#081225',
+        '#2B0D1A',
       borderRadius: 26,
       padding: 24,
+      borderWidth: 1,
+      borderColor: '#71314B',
     },
 
 
@@ -4400,7 +4460,7 @@ const styles =
 
 
     modalText: {
-      color: '#CBD5E1',
+      color: '#D6B4C0',
       fontSize: 14,
       textAlign:
         'center',
@@ -4413,19 +4473,19 @@ const styles =
       paddingHorizontal: 14,
       borderRadius: 14,
       backgroundColor:
-        '#111827',
+        '#401226',
       marginBottom: 8,
       borderWidth: 1,
       borderColor:
-        '#1E293B',
+        '#71314B',
     },
 
 
     reasonButtonSelected: {
       borderColor:
-        '#16C6E5',
+        '#FF6B91',
       backgroundColor:
-        '#172033',
+        '#5A1730',
     },
 
 
@@ -4441,7 +4501,7 @@ const styles =
 
     submitReportButton: {
       backgroundColor:
-        '#16C6E5',
+        '#F34C7A',
       paddingVertical: 14,
       borderRadius: 17,
       marginTop: 10,
@@ -4449,7 +4509,7 @@ const styles =
 
 
     submitReportText: {
-      color: '#000000',
+      color: '#FFFFFF',
       fontSize: 15,
       fontWeight:
         '800',
@@ -4461,17 +4521,19 @@ const styles =
     modalBox: {
       width: '85%',
       backgroundColor:
-        '#081225',
+        '#2B0D1A',
       borderRadius: 30,
       padding: 28,
       alignItems:
         'center',
+      borderWidth: 1,
+      borderColor: '#71314B',
     },
 
 
     watchButton: {
       backgroundColor:
-        '#00E0FF',
+        '#F34C7A',
       paddingVertical: 16,
       paddingHorizontal: 40,
       borderRadius: 20,
@@ -4479,7 +4541,7 @@ const styles =
 
 
     watchButtonText: {
-      color: '#000',
+      color: '#FFFFFF',
       fontWeight:
         '800',
       fontSize: 16,

@@ -7,6 +7,7 @@ import React, {
 
 import {
   ActivityIndicator,
+  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -396,11 +397,18 @@ export default function SearchingScreen() {
 
   return (
 
-    <View
-      style={
-        styles.container
-      }
-    >
+    <SafeAreaView style={styles.safeArea}>
+      <View
+        style={
+          styles.container
+        }
+      >
+
+      <Text style={styles.eyebrow}>
+        QELUNO
+      </Text>
+
+      <View style={styles.searchSurface}>
 
       <View
         style={
@@ -416,7 +424,7 @@ export default function SearchingScreen() {
 
           <ActivityIndicator
             size="large"
-            color="#FF4F81"
+            color="#FF6B91"
           />
 
         </View>
@@ -461,6 +469,8 @@ export default function SearchingScreen() {
         Searching for {seconds}s
       </Text>
 
+      </View>
+
 
       <TouchableOpacity
         style={
@@ -486,7 +496,8 @@ export default function SearchingScreen() {
 
       </TouchableOpacity>
 
-    </View>
+      </View>
+    </SafeAreaView>
 
   );
 
@@ -500,12 +511,21 @@ export default function SearchingScreen() {
 const styles =
   StyleSheet.create({
 
+    safeArea: {
+
+      flex: 1,
+
+      backgroundColor:
+        '#16070D',
+
+    },
+
     container: {
 
       flex: 1,
 
       backgroundColor:
-        '#12070D',
+        '#16070D',
 
       justifyContent:
         'center',
@@ -514,10 +534,77 @@ const styles =
         'center',
 
       paddingHorizontal:
-        24,
+        20,
 
       paddingBottom:
-        80,
+        36,
+
+    },
+
+    eyebrow: {
+
+      color:
+        '#FF6B91',
+
+      fontSize:
+        11,
+
+      fontWeight:
+        '800',
+
+      letterSpacing:
+        2.4,
+
+      marginBottom:
+        20,
+
+    },
+
+    searchSurface: {
+
+      width:
+        '100%',
+
+      backgroundColor:
+        '#260D18',
+
+      borderWidth:
+        1,
+
+      borderColor:
+        '#542033',
+
+      borderRadius:
+        30,
+
+      paddingHorizontal:
+        20,
+
+      paddingTop:
+        28,
+
+      paddingBottom:
+        26,
+
+      alignItems:
+        'center',
+
+      shadowColor:
+        '#080204',
+
+      shadowOffset: {
+        width: 0,
+        height: 10,
+      },
+
+      shadowOpacity:
+        0.3,
+
+      shadowRadius:
+        20,
+
+      elevation:
+        5,
 
     },
 
@@ -531,7 +618,13 @@ const styles =
       borderRadius: 999,
 
       backgroundColor:
-        'rgba(255,79,129,0.08)',
+        'rgba(243,76,122,0.14)',
+
+      borderWidth:
+        1,
+
+      borderColor:
+        'rgba(255,107,145,0.28)',
 
       justifyContent:
         'center',
@@ -540,7 +633,7 @@ const styles =
         'center',
 
       marginBottom:
-        40,
+        28,
 
     },
 
@@ -554,12 +647,12 @@ const styles =
       borderRadius: 999,
 
       backgroundColor:
-        '#1B0C14',
+        '#18070E',
 
       borderWidth: 1,
 
       borderColor:
-        '#4A1D30',
+        '#71314B',
 
       justifyContent:
         'center',
@@ -573,16 +666,19 @@ const styles =
     title: {
 
       color:
-        '#FF4F81',
+        '#FFF9FB',
 
       fontSize:
-        30,
+        28,
 
       fontWeight:
         '800',
 
       marginBottom:
-        12,
+        9,
+
+      letterSpacing:
+        -0.4,
 
     },
 
@@ -590,10 +686,10 @@ const styles =
     subTitle: {
 
       color:
-        '#A995A1',
+        '#E0C6CF',
 
       fontSize:
-        16,
+        15,
 
       textAlign:
         'center',
@@ -604,10 +700,10 @@ const styles =
     hint: {
 
       color:
-        '#806D79',
+        '#B993A2',
 
       fontSize:
-        13,
+        13.5,
 
       marginTop:
         10,
@@ -618,13 +714,16 @@ const styles =
     timer: {
 
       color:
-        '#A995A1',
+        '#FF91AC',
 
       fontSize:
-        14,
+        13,
 
       marginTop:
-        18,
+        20,
+
+      fontWeight:
+        '700',
 
     },
 
@@ -632,25 +731,42 @@ const styles =
     cancelButton: {
 
       marginTop:
-        45,
+        22,
 
       backgroundColor:
-        '#29101B',
+        '#401226',
 
       borderWidth:
         1,
 
       borderColor:
-        '#4A1D30',
+        '#8A3655',
 
       paddingVertical:
-        16,
+        17,
 
       paddingHorizontal:
-        32,
+        34,
 
       borderRadius:
-        20,
+        18,
+
+      shadowColor:
+        '#080204',
+
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+
+      shadowOpacity:
+        0.2,
+
+      shadowRadius:
+        10,
+
+      elevation:
+        3,
 
     },
 
@@ -658,7 +774,7 @@ const styles =
     cancelText: {
 
       color:
-        '#FFF7FB',
+        '#FFF9FB',
 
       fontSize:
         15,

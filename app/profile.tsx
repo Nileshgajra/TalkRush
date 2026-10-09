@@ -1,11 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuth } from '@react-native-firebase/auth';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -82,20 +86,6 @@ export default function ProfileScreen() {
 
     loadProfile();
   }, []);
-
-  // =========================
-  // CREATE USER ID
-  // =========================
-
-  const createUserId = () => {
-    return (
-      Date.now().toString() +
-      '-' +
-      Math.random()
-        .toString(36)
-        .substring(2, 12)
-    );
-  };
 
   // =========================
   // PICK PHOTO
@@ -200,10 +190,10 @@ export default function ProfileScreen() {
     setSaving(true);
 
     try {
-      // Keep old ID when editing.
-      // Create new ID only for a new profile.
-      const finalUserId =
-        userId || createUserId();
+      const finalUserId = getAuth().currentUser?.uid;
+      if (!finalUserId) {
+        throw new Error('Firebase anonymous authentication is not ready.');
+      }
 
       const profile: Profile = {
         userId:
@@ -281,17 +271,34 @@ export default function ProfileScreen() {
     <SafeAreaView
       style={styles.safeArea}
     >
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : 'height'
+        }
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.container}>
 
         {/* HEADER */}
 
         <View style={styles.header}>
+          <Text style={styles.eyebrow}>
+            QELUNO
+          </Text>
+
           <Text style={styles.title}>
-            Create Profile
+            Create your profile
           </Text>
 
           <Text style={styles.subtitle}>
-            Tell us a little about yourself
+            A few details, then let the sparks fly.
           </Text>
         </View>
 
@@ -332,14 +339,14 @@ export default function ProfileScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>
-            Name
+            Your name
           </Text>
 
           <TextInput
             value={name}
             onChangeText={setName}
             placeholder="Enter your name"
-            placeholderTextColor="#806D79"
+            placeholderTextColor="#A98696"
             style={styles.input}
             maxLength={30}
           />
@@ -349,14 +356,14 @@ export default function ProfileScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>
-            Age
+            Your age
           </Text>
 
           <TextInput
             value={age}
             onChangeText={setAge}
-            placeholder="Enter your age"
-            placeholderTextColor="#806D79"
+            placeholder="18–60"
+            placeholderTextColor="#A98696"
             style={styles.input}
             keyboardType="number-pad"
             maxLength={2}
@@ -367,7 +374,7 @@ export default function ProfileScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>
-            Gender
+            I am
           </Text>
 
           <View
@@ -450,7 +457,9 @@ export default function ProfileScreen() {
           )}
         </TouchableOpacity>
 
-      </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -458,86 +467,123 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#12070D',
+    backgroundColor: '#16070D',
+  },
+
+  keyboardView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 44,
+    paddingBottom: 28,
   },
 
   container: {
     flex: 1,
-    paddingHorizontal: 22,
-    paddingTop: 28,
+    backgroundColor: '#260D18',
+    borderWidth: 1,
+    borderColor: '#542033',
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 22,
+    shadowColor: '#080204',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 5,
   },
 
   header: {
-    marginBottom: 24,
+    marginBottom: 22,
+    paddingHorizontal: 2,
+  },
+
+  eyebrow: {
+    color: '#FF6B91',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2.2,
+    marginBottom: 9,
   },
 
   title: {
-    color: '#FFF7FB',
-    fontSize: 30,
+    color: '#FFF9FB',
+    fontSize: 32,
     fontWeight: '800',
+    letterSpacing: -0.5,
   },
 
   subtitle: {
-    color: '#A995A1',
-    fontSize: 13,
-    marginTop: 5,
+    color: '#C6AAB5',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 7,
   },
 
   photoContainer: {
     alignSelf: 'center',
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     marginBottom: 24,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#FF5C85',
   },
 
   photo: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
 
   photoPlaceholder: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#29101B',
-    borderWidth: 1,
-    borderColor: '#4A1D30',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#401226',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   photoIcon: {
     fontSize: 30,
+    color: '#FF91AB',
   },
 
   photoText: {
-    color: '#A995A1',
-    fontSize: 10,
+    color: '#FFE6ED',
+    fontSize: 11,
+    fontWeight: '700',
     marginTop: 2,
   },
 
   field: {
-    marginBottom: 17,
+    marginBottom: 18,
   },
 
   label: {
-    color: '#FFF7FB',
-    fontSize: 14,
+    color: '#FFF4F7',
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 7,
+    marginBottom: 8,
   },
 
   input: {
-    height: 52,
-    backgroundColor: '#1B0C14',
+    height: 54,
+    backgroundColor: '#18070E',
     borderWidth: 1,
-    borderColor: '#38202B',
-    borderRadius: 15,
-    paddingHorizontal: 15,
-    color: '#FFF7FB',
+    borderColor: '#613047',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    color: '#FFF9FB',
     fontSize: 15,
   },
 
@@ -548,46 +594,46 @@ const styles = StyleSheet.create({
 
   genderButton: {
     flex: 1,
-    height: 52,
-    backgroundColor: '#1B0C14',
+    height: 58,
+    backgroundColor: '#18070E',
     borderWidth: 1,
-    borderColor: '#38202B',
-    borderRadius: 15,
+    borderColor: '#613047',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   genderButtonActive: {
-    backgroundColor: '#3A1425',
-    borderColor: '#FF4F81',
+    backgroundColor: '#50152C',
+    borderColor: '#FF668B',
   },
 
   genderText: {
-    color: '#A995A1',
-    fontSize: 15,
+    color: '#C7A2AF',
+    fontSize: 14,
     fontWeight: '700',
   },
 
   genderTextActive: {
-    color: '#FF4F81',
+    color: '#FFFFFF',
   },
 
   continueButton: {
-    height: 54,
-    marginTop: 12,
-    borderRadius: 17,
-    backgroundColor: '#FF4F81',
+    height: 56,
+    marginTop: 18,
+    borderRadius: 18,
+    backgroundColor: '#F34C7A',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#FF4F81',
+    shadowColor: '#F34C7A',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.22,
-    shadowRadius: 9,
-    elevation: 5,
+    shadowOpacity: 0.34,
+    shadowRadius: 12,
+    elevation: 7,
   },
 
   continueButtonDisabled: {

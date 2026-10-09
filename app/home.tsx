@@ -520,7 +520,7 @@ export default function HomeScreen() {
               </Text>
 
               <Text style={styles.navText}>
-                Settings
+                Profile
               </Text>
             </TouchableOpacity>
 
@@ -535,18 +535,18 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#12070D',
+    backgroundColor: '#16070D',
   },
 
   main: {
     flex: 1,
-    backgroundColor: '#12070D',
+    backgroundColor: '#16070D',
   },
 
   scrollContent: {
-    paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'android' ? 18 : 12,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 26 : 18,
+    paddingBottom: 16,
   },
 
   header: {
@@ -560,31 +560,31 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    color: '#FFF7FB',
-    fontSize: 28,
+    color: '#FFF9FB',
+    fontSize: 29,
     fontWeight: '800',
-    letterSpacing: 0.2,
+    letterSpacing: 0.8,
   },
 
   logoHeart: {
-    color: '#FF4F81',
+    color: '#FF6B91',
   },
 
   welcome: {
-    color: '#A995A1',
-    fontSize: 13,
-    marginTop: 4,
+    color: '#C6AAB5',
+    fontSize: 13.5,
+    marginTop: 5,
   },
 
   coinBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#29101B',
+    backgroundColor: '#2D0E1C',
     borderWidth: 1,
-    borderColor: '#4A1D30',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
+    borderColor: '#683048',
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 19,
     marginLeft: 10,
   },
 
@@ -593,43 +593,52 @@ const styles = StyleSheet.create({
   },
 
   coinText: {
-    color: '#FFF7FB',
+    color: '#FFF9FB',
     fontSize: 16,
     fontWeight: '800',
     marginLeft: 5,
   },
 
   titleSection: {
-    marginTop: 18,
-    marginBottom: 11,
+    marginTop: 30,
+    marginBottom: 15,
   },
 
   title: {
-    color: '#FFF7FB',
-    fontSize: 23,
+    color: '#FFF9FB',
+    fontSize: 26,
     fontWeight: '800',
-    lineHeight: 28,
+    letterSpacing: -0.4,
+    lineHeight: 31,
   },
 
   subtitle: {
-    color: '#A995A1',
-    fontSize: 13.5,
-    marginTop: 5,
+    color: '#C6AAB5',
+    fontSize: 14,
+    marginTop: 6,
   },
 
   card: {
-    backgroundColor: '#1B0C14',
-    borderRadius: 18,
-    padding: 12,
+    backgroundColor: '#260D18',
+    borderRadius: 22,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#38202B',
-    marginBottom: 9,
-    minHeight: 72,
+    borderColor: '#542033',
+    marginBottom: 12,
+    minHeight: 78,
+    shadowColor: '#080204',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   genderExpandedCard: {
-    paddingBottom: 14,
-    borderColor: '#64213D',
+    paddingBottom: 16,
+    borderColor: '#8A3655',
   },
 
   genderHeader: {
@@ -638,43 +647,43 @@ const styles = StyleSheet.create({
   },
 
   iconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: '#29101B',
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#401226',
     borderWidth: 1,
-    borderColor: '#4A1D30',
+    borderColor: '#6C2944',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   icon: {
-    fontSize: 21,
+    fontSize: 22,
   },
 
   cardContent: {
     flex: 1,
-    marginLeft: 11,
-    marginRight: 6,
+    marginLeft: 13,
+    marginRight: 8,
   },
 
   cardTitle: {
-    color: '#FFF7FB',
+    color: '#FFF9FB',
     fontSize: 17,
     fontWeight: '800',
   },
 
   cardSubtitle: {
-    color: '#A995A1',
-    fontSize: 12,
-    marginTop: 3,
+    color: '#C6AAB5',
+    fontSize: 12.5,
+    marginTop: 4,
   },
 
   freeBadge: {
-    backgroundColor: '#17351F',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 10,
+    backgroundColor: '#213B2A',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 11,
   },
 
   freeText: {
@@ -684,10 +693,10 @@ const styles = StyleSheet.create({
   },
 
   coinBadge: {
-    backgroundColor: '#3A2912',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 10,
+    backgroundColor: '#482920',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 11,
   },
 
   coinBadgeText: {
@@ -699,14 +708,14 @@ const styles = StyleSheet.create({
   /* GENDER OPTIONS */
 
   genderOptions: {
-    marginTop: 14,
-    paddingTop: 14,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#38202B',
+    borderTopColor: '#5B263A',
   },
 
   chooseText: {
-    color: '#FFF7FB',
+    color: '#FFF4F7',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 10,
@@ -719,19 +728,19 @@ const styles = StyleSheet.create({
 
   genderButton: {
     flex: 1,
-    minHeight: 58,
-    borderRadius: 14,
-    backgroundColor: '#29101B',
+    minHeight: 62,
+    borderRadius: 16,
+    backgroundColor: '#18070E',
     borderWidth: 1,
-    borderColor: '#4A1D30',
+    borderColor: '#613047',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
   },
 
   genderButtonSelected: {
-    backgroundColor: '#FF4F81',
-    borderColor: '#FF4F81',
+    backgroundColor: '#50152C',
+    borderColor: '#FF668B',
   },
 
   genderEmoji: {
@@ -740,7 +749,7 @@ const styles = StyleSheet.create({
   },
 
   genderButtonText: {
-    color: '#D4C2CB',
+    color: '#D8BBC6',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -750,10 +759,10 @@ const styles = StyleSheet.create({
   },
 
   continueButton: {
-    marginTop: 12,
-    minHeight: 50,
-    borderRadius: 14,
-    backgroundColor: '#FF4F81',
+    marginTop: 14,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: '#F34C7A',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -769,7 +778,7 @@ const styles = StyleSheet.create({
   },
 
   costText: {
-    color: '#A995A1',
+    color: '#C6AAB5',
     fontSize: 11,
     textAlign: 'center',
     marginTop: 8,
@@ -778,22 +787,30 @@ const styles = StyleSheet.create({
   /* REWARD CARD */
 
   rewardCard: {
-    backgroundColor: '#26101A',
-    borderRadius: 18,
-    padding: 12,
+    backgroundColor: '#32101F',
+    borderRadius: 22,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#64213D',
-    marginBottom: 8,
-    minHeight: 72,
+    borderColor: '#7B2C4A',
+    marginBottom: 12,
+    minHeight: 78,
+    shadowColor: '#080204',
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   rewardIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: '#3A1425',
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#55172E',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -803,22 +820,22 @@ const styles = StyleSheet.create({
   },
 
   rewardTitle: {
-    color: '#FFF7FB',
+    color: '#FFF9FB',
     fontSize: 16,
     fontWeight: '800',
   },
 
   rewardSubtitle: {
-    color: '#BFA5B2',
-    fontSize: 12,
-    marginTop: 3,
+    color: '#D1AFBC',
+    fontSize: 12.5,
+    marginTop: 4,
   },
 
   earnBadge: {
-    backgroundColor: '#FF4F81',
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 10,
+    backgroundColor: '#F34C7A',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 11,
   },
 
   earnText: {
@@ -830,22 +847,22 @@ const styles = StyleSheet.create({
   adContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 5,
     minHeight: 50,
   },
 
   /* BOTTOM NAV */
 
   bottomSafeArea: {
-    backgroundColor: '#180A11',
+    backgroundColor: '#1B0911',
     paddingBottom: Platform.OS === 'android' ? 8 : 4,
   },
 
   bottomNav: {
-    height: 64,
-    backgroundColor: '#180A11',
+    height: 68,
+    backgroundColor: '#1B0911',
     borderTopWidth: 1,
-    borderTopColor: '#38202B',
+    borderTopColor: '#542033',
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -858,24 +875,24 @@ const styles = StyleSheet.create({
   },
 
   navIcon: {
-    color: '#806B77',
+    color: '#9F7181',
     fontSize: 23,
   },
 
   navIconActive: {
-    color: '#FF4F81',
+    color: '#FF668B',
     fontSize: 23,
   },
 
   navText: {
-    color: '#806B77',
+    color: '#9F7181',
     fontSize: 11,
     fontWeight: '600',
     marginTop: 3,
   },
 
   navTextActive: {
-    color: '#FF4F81',
+    color: '#FF668B',
     fontSize: 11,
     fontWeight: '800',
     marginTop: 3,

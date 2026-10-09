@@ -701,7 +701,7 @@ export default function SettingsScreen() {
 
                 <ActivityIndicator
                   size="small"
-                  color="#FF4F81"
+                  color="#FF6B91"
                 />
 
               ) : blockedUsers.length === 0 ? (
@@ -890,7 +890,7 @@ export default function SettingsScreen() {
 
                 <ActivityIndicator
                   size="small"
-                  color="#FF4F81"
+                  color="#FF6B91"
                 />
 
               ) : reports.length === 0 ? (
@@ -1132,7 +1132,7 @@ const styles =
     container: {
       flex: 1,
       backgroundColor:
-        '#12070D',
+        '#16070D',
     },
 
 
@@ -1142,8 +1142,11 @@ const styles =
 
 
     content: {
-      paddingHorizontal: 18,
-      paddingTop: 18,
+      paddingHorizontal: 20,
+      paddingTop:
+        Platform.OS === 'android'
+          ? 26
+          : 18,
       paddingBottom: 40,
     },
 
@@ -1153,19 +1156,19 @@ const styles =
         'row',
       alignItems:
         'center',
-      marginBottom: 28,
+      marginBottom: 30,
     },
 
 
     backButton: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
+      width: 50,
+      height: 50,
+      borderRadius: 25,
       backgroundColor:
-        '#21101A',
+        '#401226',
       borderWidth: 1,
       borderColor:
-        '#4A1D30',
+        '#71314B',
       justifyContent:
         'center',
       alignItems:
@@ -1175,7 +1178,7 @@ const styles =
 
 
     backText: {
-      color: '#FFF7FB',
+      color: '#FFF9FB',
       fontSize: 34,
       lineHeight: 36,
       marginTop: -3,
@@ -1183,52 +1186,61 @@ const styles =
 
 
     title: {
-      color: '#FFF7FB',
-      fontSize: 27,
+      color: '#FFF9FB',
+      fontSize: 29,
       fontWeight: '800',
+      letterSpacing: -0.3,
     },
 
 
     subtitle: {
-      color: '#A995A1',
-      fontSize: 13,
-      marginTop: 3,
+      color: '#C6AAB5',
+      fontSize: 13.5,
+      marginTop: 4,
     },
 
 
     card: {
       backgroundColor:
-        '#1B0C14',
-      borderRadius: 20,
+        '#260D18',
+      borderRadius: 24,
       borderWidth: 1,
       borderColor:
-        '#38202B',
+        '#542033',
       overflow: 'hidden',
+      shadowColor: '#080204',
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      shadowOpacity: 0.22,
+      shadowRadius: 16,
+      elevation: 4,
     },
 
 
     row: {
-      minHeight: 82,
+      minHeight: 86,
       flexDirection:
         'row',
       alignItems:
         'center',
-      paddingHorizontal: 14,
+      paddingHorizontal: 16,
       borderBottomWidth: 1,
       borderBottomColor:
-        '#30202A',
+        '#542033',
     },
 
 
     iconBox: {
-      width: 46,
-      height: 46,
-      borderRadius: 14,
+      width: 50,
+      height: 50,
+      borderRadius: 16,
       backgroundColor:
-        '#29101B',
+        '#401226',
       borderWidth: 1,
       borderColor:
-        '#4A1D30',
+        '#71314B',
       justifyContent:
         'center',
       alignItems:
@@ -1249,21 +1261,21 @@ const styles =
 
 
     rowTitle: {
-      color: '#FFF7FB',
+      color: '#FFF9FB',
       fontSize: 16,
       fontWeight: '800',
     },
 
 
     rowSubtitle: {
-      color: '#A995A1',
-      fontSize: 11.5,
+      color: '#C6AAB5',
+      fontSize: 12,
       marginTop: 4,
     },
 
 
     arrow: {
-      color: '#806B77',
+      color: '#FF91AC',
       fontSize: 27,
     },
 
@@ -1272,15 +1284,15 @@ const styles =
       paddingHorizontal: 14,
       paddingVertical: 12,
       backgroundColor:
-        '#150A10',
+        '#1D0812',
       borderBottomWidth: 1,
       borderBottomColor:
-        '#30202A',
+        '#542033',
     },
 
 
     emptyText: {
-      color: '#A995A1',
+      color: '#C6AAB5',
       fontSize: 13,
       textAlign: 'center',
       paddingVertical: 14,
@@ -1295,7 +1307,7 @@ const styles =
       paddingVertical: 10,
       borderBottomWidth: 1,
       borderBottomColor:
-        '#30202A',
+        '#542033',
     },
 
 
@@ -1304,7 +1316,9 @@ const styles =
       height: 42,
       borderRadius: 21,
       backgroundColor:
-        '#FF4F81',
+        '#F34C7A',
+      borderWidth: 2,
+      borderColor: '#FF91AC',
       justifyContent:
         'center',
       alignItems:
@@ -1326,14 +1340,14 @@ const styles =
 
 
     userName: {
-      color: '#FFF7FB',
+      color: '#FFF9FB',
       fontSize: 15,
       fontWeight: '700',
     },
 
 
     userIdText: {
-      color: '#806B77',
+      color: '#A77D8C',
       fontSize: 11,
       marginTop: 3,
     },
@@ -1341,10 +1355,10 @@ const styles =
 
     unblockButton: {
       backgroundColor:
-        '#29101B',
+        '#401226',
       borderWidth: 1,
       borderColor:
-        '#FF4F81',
+        '#FF789A',
       paddingHorizontal: 13,
       paddingVertical: 8,
       borderRadius: 14,
@@ -1352,7 +1366,7 @@ const styles =
 
 
     unblockText: {
-      color: '#FF6B91',
+      color: '#FFB1C2',
       fontSize: 12,
       fontWeight: '800',
     },
@@ -1360,13 +1374,13 @@ const styles =
 
     reportItem: {
       backgroundColor:
-        '#1B0C14',
-      borderRadius: 14,
+        '#310E1D',
+      borderRadius: 16,
       padding: 13,
       marginBottom: 9,
       borderWidth: 1,
       borderColor:
-        '#38202B',
+        '#71314B',
     },
 
 
@@ -1381,28 +1395,28 @@ const styles =
 
 
     reportTitle: {
-      color: '#FFF7FB',
+      color: '#FFF9FB',
       fontSize: 14,
       fontWeight: '800',
     },
 
 
     reportStatus: {
-      color: '#FF6B91',
+      color: '#FF91AC',
       fontSize: 11,
       fontWeight: '700',
     },
 
 
     reportReason: {
-      color: '#CDBBC5',
+      color: '#E0C6CF',
       fontSize: 13,
       marginTop: 7,
     },
 
 
     reportDate: {
-      color: '#806B77',
+      color: '#A77D8C',
       fontSize: 10,
       marginTop: 7,
     },
@@ -1416,13 +1430,13 @@ const styles =
 
 
     heart: {
-      color: '#FF4F81',
+      color: '#FF6B91',
       fontSize: 28,
     },
 
 
     infoText: {
-      color: '#FFF7FB',
+      color: '#FFF9FB',
       fontSize: 15,
       fontWeight: '700',
       marginTop: 5,
@@ -1430,14 +1444,14 @@ const styles =
 
 
     version: {
-      color: '#806B77',
+      color: '#A77D8C',
       fontSize: 11,
       marginTop: 4,
     },
 
 
     bottomSafeArea: {
-      backgroundColor: '#180A11',
+      backgroundColor: '#1B0911',
       paddingBottom:
         Platform.OS === 'android'
           ? 8
@@ -1446,10 +1460,10 @@ const styles =
 
 
     bottomNav: {
-      height: 64,
-      backgroundColor: '#180A11',
+      height: 68,
+      backgroundColor: '#1B0911',
       borderTopWidth: 1,
-      borderTopColor: '#38202B',
+      borderTopColor: '#542033',
       flexDirection: 'row',
       justifyContent: 'space-around',
       alignItems: 'center',
@@ -1464,19 +1478,19 @@ const styles =
 
 
     navIcon: {
-      color: '#806B77',
+      color: '#9F7181',
       fontSize: 23,
     },
 
 
     navIconActive: {
-      color: '#FF4F81',
+      color: '#FF668B',
       fontSize: 23,
     },
 
 
     navText: {
-      color: '#806B77',
+      color: '#9F7181',
       fontSize: 11,
       fontWeight: '600',
       marginTop: 3,
@@ -1484,7 +1498,7 @@ const styles =
 
 
     navTextActive: {
-      color: '#FF4F81',
+      color: '#FF668B',
       fontSize: 11,
       fontWeight: '800',
       marginTop: 3,

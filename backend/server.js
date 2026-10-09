@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const FriendRequest = require('./models/FriendRequest');
 const Message = require('./models/Message');
+const PendingMediaUpload = require('./models/PendingMediaUpload');
 const Report = require('./models/Report');
 const firebaseAdmin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
@@ -38,6 +39,7 @@ let randomQueue = [];
 // =========================
 
 const pairs = {};
+const pairSessionIds = {};
 
 // =========================
 // ONLINE USERS
@@ -50,8 +52,16 @@ let connectionSequence = 0;
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_DURATION_SECONDS = 60;
-const MEDIA_UPLOAD_TTL_MS = 15 * 60 * 1000;
+// Supabase signed upload URLs remain usable for two hours. Include a small
+// cushion because the pending record is written before Supabase signs the URL.
+const MEDIA_UPLOAD_TTL_MS = 2 * 60 * 60 * 1000 + 5 * 60 * 1000;
+const PENDING_UPLOAD_FINALIZATION_LEASE_MS = 10 * 60 * 1000;
 const MEDIA_DOWNLOAD_TTL_MS = 60 * 60 * 1000;
+const FRIEND_MEDIA_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const MEDIA_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const RANDOM_MEDIA_LEASE_MS = 5 * 60 * 1000;
+const RANDOM_MEDIA_LEASE_RENEW_INTERVAL_MS = 30 * 1000;
+const RANDOM_MEDIA_CLEANUP_INTERVAL_MS = 60 * 1000;
 
 const ALLOWED_MEDIA_TYPES = {
   image: new Set([
@@ -130,6 +140,28 @@ function getFirebaseMessaging() {
   }
 }
 
+function getFirebaseAuth() {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!serviceAccountJson) throw new Error('FIREBASE_SERVICE_ACCOUNT is required for socket authentication');
+  if (!firebaseAdmin.apps.length) {
+    firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.cert(JSON.parse(serviceAccountJson)) });
+  }
+  return firebaseAdmin.auth();
+}
+
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (typeof token !== 'string' || !token) return next(new Error('Authentication required'));
+    const decodedToken = await getFirebaseAuth().verifyIdToken(token);
+    socket.userId = decodedToken.uid;
+    return next();
+  } catch (error) {
+    console.error('Socket authentication failed:', error.message);
+    return next(new Error('Authentication failed'));
+  }
+});
+
 function getSupabaseStorage() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey =
@@ -186,13 +218,204 @@ function isSocketSearching(socketId) {
 
 function removeFromPair(socketId) {
   const partnerId = pairs[socketId];
+  const sessionId = pairSessionIds[socketId];
 
   if (partnerId) {
     delete pairs[partnerId];
     delete pairs[socketId];
+    delete pairSessionIds[partnerId];
+    delete pairSessionIds[socketId];
+  }
+
+  if (sessionId) {
+    void expireRandomSessionMedia(sessionId);
   }
 
   return partnerId;
+}
+
+async function deleteStoredMedia(message) {
+  if (!message?.mediaPath || message.mediaDeleted) return true;
+  const storage = getSupabaseStorage();
+  if (!storage) {
+    console.error('Media cleanup failed: Supabase storage is not configured.');
+    return false;
+  }
+
+  try {
+    // Hide the object from subsequent signed URL requests while deletion runs.
+    await Message.updateOne(
+      { _id: message._id, mediaDeleted: { $ne: true } },
+      { $set: { mediaDeleting: true } }
+    );
+    const { error } = await storage.bucket.remove([message.mediaPath]);
+    if (error) throw error;
+    await Message.updateOne(
+      { _id: message._id, mediaDeleted: { $ne: true } },
+      { $set: { mediaDeleted: true }, $unset: { mediaDeleting: 1 } }
+    );
+    const expiredData = { messageId: message._id.toString() };
+    for (const userId of [message.senderId, message.receiverId]) {
+      const socketId = onlineUsers[userId];
+      if (socketId) io.to(socketId).emit('media-expired', expiredData);
+    }
+    return true;
+  } catch (error) {
+    // A missing object is already in the desired state; Supabase's remove API
+    // reports successful deletion for absent paths. Other errors are retried.
+    console.error('Media cleanup deletion failed:', message.mediaPath, error?.message || error);
+    await Message.updateOne(
+      { _id: message._id, mediaDeleted: { $ne: true } },
+      { $unset: { mediaDeleting: 1 } }
+    ).catch((updateError) => console.error('Media cleanup status reset failed:', updateError));
+    return false;
+  }
+}
+
+async function expireRandomSessionMedia(sessionId) {
+  try {
+    await Message.updateMany(
+      { mediaRetention: 'random', randomSessionId: sessionId },
+      { $set: { randomSessionEnded: true } }
+    );
+    const messages = await Message.find({
+      mediaRetention: 'random', randomSessionId: sessionId,
+      randomSessionEnded: true, mediaDeleted: { $ne: true },
+    }).select('_id mediaPath mediaDeleted senderId receiverId').lean();
+    for (const message of messages) await deleteStoredMedia(message);
+    // Keep pending uploads until their signed upload capability has expired.
+    // Otherwise a client could upload after this cleanup removed the object.
+    await PendingMediaUpload.updateMany(
+      { chatType: 'random', randomSessionId: sessionId, finalized: false },
+      { $set: { sessionEndedAt: new Date() } }
+    );
+    await cleanupExpiredPendingUploads();
+  } catch (error) {
+    console.error('Random chat media cleanup failed:', sessionId, error);
+  }
+}
+
+async function cleanupExpiredFriendMedia() {
+  const cutoff = new Date(Date.now() - FRIEND_MEDIA_RETENTION_MS);
+  // The legacy Message collection contains persisted friend messages only;
+  // random media was never saved there. Records without paths are ignored.
+  const messages = await Message.find({
+    mediaType: { $in: ['image', 'video'] },
+    mediaPath: { $type: 'string', $ne: '' },
+    createdAt: { $lte: cutoff },
+    mediaDeleted: { $ne: true },
+    $or: [{ mediaRetention: 'friend' }, { mediaRetention: { $exists: false } }],
+  }).select('_id mediaPath mediaDeleted senderId receiverId').lean();
+  for (const message of messages) await deleteStoredMedia(message);
+}
+
+async function cleanupEndedRandomMedia() {
+  const activeSessionIds = [...new Set(Object.entries(pairSessionIds)
+    .filter(([socketId]) => Boolean(pairs[socketId]))
+    .map(([, sessionId]) => sessionId))];
+  const inactiveSessionFilter = activeSessionIds.length
+    ? {
+        $or: [
+          { randomSessionExpiresAt: { $lte: new Date() } },
+          { randomSessionExpiresAt: { $exists: false } },
+        ],
+        randomSessionId: { $nin: activeSessionIds },
+      }
+    : {
+        $or: [
+          { randomSessionExpiresAt: { $lte: new Date() } },
+          { randomSessionExpiresAt: { $exists: false } },
+        ],
+      };
+  const messages = await Message.find({
+    mediaRetention: 'random',
+    mediaDeleted: { $ne: true },
+    $or: [
+      { randomSessionEnded: true },
+      { randomSessionEnded: { $ne: true }, ...inactiveSessionFilter },
+    ],
+  })
+    .select('_id mediaPath mediaDeleted senderId receiverId')
+    .lean();
+  for (const message of messages) await deleteStoredMedia(message);
+}
+
+async function cleanupExpiredPendingUploads() {
+  const now = new Date();
+  const pendingUploads = await PendingMediaUpload.find({
+    finalized: { $ne: true },
+    expiresAt: { $lte: now },
+    $or: [
+      { finalizing: { $ne: true } },
+      { finalizingUntil: { $lte: now } },
+    ],
+  }).lean();
+
+  for (const pending of pendingUploads) {
+    try {
+      // A message is authoritative if finalization succeeded but the pending
+      // record update/removal failed. Never let pending cleanup delete it.
+      const message = await Message.findOne({ mediaPath: pending.mediaPath })
+        .select('_id')
+        .lean();
+      if (message) {
+        await PendingMediaUpload.deleteOne({ _id: pending._id });
+        continue;
+      }
+
+      const storage = getSupabaseStorage();
+      if (!storage) {
+        console.error('Pending upload cleanup failed: Supabase storage is not configured.', pending.mediaPath);
+        continue;
+      }
+
+      const { error } = await storage.bucket.remove([pending.mediaPath]);
+      if (error) throw error;
+      await PendingMediaUpload.deleteOne({ _id: pending._id, finalized: { $ne: true } });
+    } catch (error) {
+      // Keep failed records so the next periodic cleanup can retry them.
+      console.error('Pending upload cleanup failed:', pending.mediaPath, error?.message || error);
+    }
+  }
+}
+
+async function renewActiveRandomMediaLeases() {
+  const activeSessionIds = [...new Set(Object.entries(pairSessionIds)
+    .filter(([socketId]) => Boolean(pairs[socketId]))
+    .map(([, sessionId]) => sessionId))];
+  if (activeSessionIds.length === 0) return;
+
+  try {
+    await Message.updateMany(
+      {
+        mediaRetention: 'random',
+        randomSessionId: { $in: activeSessionIds },
+        randomSessionEnded: { $ne: true },
+      },
+      { $set: { randomSessionExpiresAt: new Date(Date.now() + RANDOM_MEDIA_LEASE_MS) } }
+    );
+  } catch (error) {
+    console.error('Random media lease renewal failed:', error?.message || error);
+  }
+}
+
+async function runMediaCleanup() {
+  try {
+    await cleanupExpiredFriendMedia();
+    await cleanupEndedRandomMedia();
+    await cleanupExpiredPendingUploads();
+  } catch (error) {
+    console.error('Scheduled media cleanup failed:', error);
+  }
+}
+
+async function cleanupTransientMedia() {
+  try {
+    await cleanupEndedRandomMedia();
+    await cleanupExpiredPendingUploads();
+  } catch (error) {
+    console.error('Transient media cleanup failed:', error);
+  }
 }
 
 async function isBlockedBetween(userA, userB) {
@@ -241,6 +464,9 @@ async function getUserProfile(userId) {
 
 async function getChatHistory(userA, userB) {
   return Message.find({
+    // Random media is persisted only for retention and must not surface as
+    // friend-chat history if the same users later become friends.
+    mediaRetention: { $ne: 'random' },
     $or: [
       {
         senderId: userA,
@@ -347,7 +573,21 @@ async function getMediaDownloadUrl(mediaPath) {
   }
 }
 
+async function finalizePendingMediaUpload(mediaPath, messageId) {
+  const finalizedAt = new Date();
+  const pending = await PendingMediaUpload.findOneAndUpdate(
+    { mediaPath, finalized: { $ne: true } },
+    { $set: { finalized: true, finalizedAt, messageId } },
+    { new: true }
+  ).select('_id').lean();
+
+  if (pending) {
+    await PendingMediaUpload.deleteOne({ _id: pending._id });
+  }
+}
+
 async function toMessageData(message) {
+  const expired = Boolean(message.mediaDeleted);
   return {
     id: message._id?.toString() || message.id,
     senderId: message.senderId,
@@ -355,10 +595,11 @@ async function toMessageData(message) {
     text: message.text || '',
     mediaType: message.mediaType || '',
     mediaPath: message.mediaPath || '',
+    mediaExpired: expired,
     mediaContentType: message.mediaContentType || '',
     mediaSize: message.mediaSize || 0,
     mediaDuration: message.mediaDuration || 0,
-    mediaUrl: message.mediaPath
+    mediaUrl: message.mediaPath && !expired && !message.mediaDeleting
       ? await getMediaDownloadUrl(message.mediaPath)
       : '',
     seen: message.seen,
@@ -385,6 +626,45 @@ async function consumePendingMediaUpload(socket, mediaPath) {
   }
 
   try {
+    const now = new Date();
+    const storedPending = await PendingMediaUpload.findOneAndUpdate(
+      {
+        mediaPath,
+        userId: socket.userId,
+        finalized: { $ne: true },
+        expiresAt: { $gt: now },
+        $or: [
+          { finalizing: { $ne: true } },
+          { finalizingUntil: { $lte: now } },
+        ],
+      },
+      {
+        $set: {
+          finalizing: true,
+          finalizingUntil: new Date(
+            Math.max(now.getTime(), pending.expiresAt) + PENDING_UPLOAD_FINALIZATION_LEASE_MS
+          ),
+        },
+      },
+      { new: true }
+    ).lean();
+
+    if (
+      !storedPending ||
+      storedPending.chatType !== pending.chatType ||
+      storedPending.receiverId !== pending.receiverId ||
+      storedPending.mediaType !== pending.type ||
+      (storedPending.randomSessionId || '') !== (pending.randomSessionId || '')
+    ) {
+      if (storedPending) {
+        await PendingMediaUpload.updateOne(
+          { _id: storedPending._id, finalized: { $ne: true } },
+          { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
+        );
+      }
+      return null;
+    }
+
     const {
       data: metadata,
       error,
@@ -396,6 +676,10 @@ async function consumePendingMediaUpload(socket, mediaPath) {
       metadata.contentType !== pending.contentType ||
       Number(metadata.size) !== pending.size
     ) {
+      await PendingMediaUpload.updateOne(
+        { _id: storedPending._id, finalized: { $ne: true } },
+        { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
+      );
       return null;
     }
 
@@ -407,6 +691,11 @@ async function consumePendingMediaUpload(socket, mediaPath) {
       'Media upload verification error:',
       error?.code || 'unknown error'
     );
+
+    await PendingMediaUpload.updateOne(
+      { mediaPath, userId: socket.userId, finalized: { $ne: true } },
+      { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
+    ).catch((releaseError) => console.error('Pending upload claim release failed:', releaseError?.message || releaseError));
 
     return null;
   }
@@ -644,15 +933,14 @@ io.on(
       'register-user',
       async (userData) => {
         try {
-          if (
-            !userData ||
-            !userData.userId
-          ) {
+          if (!userData || !socket.userId) {
             return;
           }
 
+          const userId = socket.userId;
+
           const currentSocketId =
-            onlineUsers[userData.userId];
+            onlineUsers[userId];
 
           const currentSocket =
             currentSocketId &&
@@ -669,14 +957,11 @@ io.on(
             return;
           }
 
-          socket.userId =
-            userData.userId;
-
           // If this user already has
           // another socket, remove old one.
           const oldSocketId =
             onlineUsers[
-              userData.userId
+              userId
             ];
 
           if (
@@ -702,20 +987,20 @@ io.on(
           }
 
           onlineUsers[
-            userData.userId
+            userId
           ] = socket.id;
 
-          emitPresence(userData.userId);
+          emitPresence(userId);
 
           await User.findOneAndUpdate(
             {
               userId:
-                userData.userId,
+                userId,
             },
             {
               $set: {
                 userId:
-                  userData.userId,
+                  userId,
 
                 name:
                   userData.name,
@@ -737,13 +1022,13 @@ io.on(
 
           console.log(
             'User Registered:',
-            userData.userId
+            userId
           );
 
           socket.emit(
             'user-registered',
             {
-              userId: userData.userId,
+              userId: userId,
             }
           );
 
@@ -883,6 +1168,12 @@ io.on(
       'find-stranger',
       async (userData) => {
         try {
+          if (!socket.userId || !userData) {
+            socket.emit('searching');
+            return;
+          }
+          userData = { ...userData, userId: socket.userId };
+
           console.log(
             'Searching:',
             socket.id,
@@ -1020,6 +1311,10 @@ io.on(
             ] =
               partner.socketId;
 
+            const randomSessionId = randomUUID();
+            pairSessionIds[socket.id] = randomSessionId;
+            pairSessionIds[partner.socketId] = randomSessionId;
+
             pairs[
               partner.socketId
             ] =
@@ -1140,6 +1435,7 @@ io.on(
             return;
           }
 
+          let randomPartnerSocketId = '';
           if (chatType === 'friend') {
             const friends =
               await areCurrentFriends(
@@ -1162,14 +1458,13 @@ io.on(
               return;
             }
           } else if (chatType === 'random') {
-            const partnerSocket =
-              io.sockets.sockets.get(
-                pairs[socket.id]
-              );
+            randomPartnerSocketId = pairs[socket.id];
+            const partnerSocket = io.sockets.sockets.get(randomPartnerSocketId);
 
             if (
               !partnerSocket ||
-              partnerSocket.userId !== receiverId
+              partnerSocket.userId !== receiverId ||
+              !pairSessionIds[socket.id]
             ) {
               respond({
                 success: false,
@@ -1184,6 +1479,10 @@ io.on(
             });
             return;
           }
+
+          const randomSessionId = chatType === 'random'
+            ? pairSessionIds[socket.id]
+            : '';
 
           const storage = getSupabaseStorage();
 
@@ -1204,6 +1503,22 @@ io.on(
             }`,
           ].join('/');
 
+          const createdAt = new Date();
+          const expiresAt = new Date(createdAt.getTime() + MEDIA_UPLOAD_TTL_MS);
+          await PendingMediaUpload.create({
+            mediaPath,
+            userId: socket.userId,
+            chatType,
+            receiverId,
+            mediaType: media.type,
+            contentType: media.contentType,
+            size: media.size,
+            duration: media.duration || 0,
+            randomSessionId: randomSessionId || '',
+            createdAt,
+            expiresAt,
+          });
+
           const {
             data: upload,
             error: uploadError,
@@ -1218,6 +1533,18 @@ io.on(
             );
           }
 
+          if (
+            chatType === 'random' &&
+            (pairs[socket.id] !== randomPartnerSocketId ||
+              pairSessionIds[socket.id] !== randomSessionId)
+          ) {
+            respond({
+              success: false,
+              message: 'Your chat partner is no longer available.',
+            });
+            return;
+          }
+
           socket.pendingMediaUploads.set(
             mediaPath,
             {
@@ -1227,8 +1554,8 @@ io.on(
               contentType: media.contentType,
               size: media.size,
               duration: media.duration || 0,
-              expiresAt:
-                Date.now() + MEDIA_UPLOAD_TTL_MS,
+              randomSessionId: randomSessionId || '',
+              expiresAt: expiresAt.getTime(),
             }
           );
 
@@ -1277,6 +1604,7 @@ io.on(
       }) => {
         try {
           const partnerId = pairs[socket.id];
+          const sessionId = pairSessionIds[socket.id];
           const partnerSocket =
             io.sockets.sockets.get(partnerId);
 
@@ -1302,7 +1630,8 @@ io.on(
           if (
             !media ||
             media.chatType !== 'random' ||
-            media.receiverId !== receiverId
+            media.receiverId !== receiverId ||
+            !sessionId
           ) {
             socket.emit(
               'media-message-error',
@@ -1313,8 +1642,11 @@ io.on(
             return;
           }
 
-          const messageData = {
-            id: `${Date.now()}-${randomUUID()}`,
+          if (pairs[socket.id] !== partnerId || pairSessionIds[socket.id] !== sessionId) {
+            return;
+          }
+
+          const savedMessage = await Message.create({
             senderId: socket.userId,
             receiverId,
             text: '',
@@ -1323,9 +1655,23 @@ io.on(
             mediaContentType: media.contentType,
             mediaSize: media.size,
             mediaDuration: media.duration,
-            mediaUrl: await getMediaDownloadUrl(mediaPath),
-            createdAt: new Date(),
-          };
+            mediaRetention: 'random',
+            randomSessionId: sessionId,
+            randomSessionExpiresAt: new Date(Date.now() + RANDOM_MEDIA_LEASE_MS),
+          });
+
+          await finalizePendingMediaUpload(mediaPath, savedMessage._id);
+          socket.pendingMediaUploads.delete(mediaPath);
+
+          if (
+            pairs[socket.id] !== partnerId ||
+            pairSessionIds[socket.id] !== sessionId
+          ) {
+            await expireRandomSessionMedia(sessionId);
+            return;
+          }
+
+          const messageData = await toMessageData(savedMessage);
 
           io.to(partnerId).emit(
             'media-message',
@@ -1616,8 +1962,12 @@ io.on(
             mediaContentType: media.contentType,
             mediaSize: media.size,
             mediaDuration: media.duration,
+            mediaRetention: 'friend',
             seen: false,
           });
+
+          await finalizePendingMediaUpload(mediaPath, savedMessage._id);
+          socket.pendingMediaUploads.delete(mediaPath);
 
           const messageData =
             await toMessageData(savedMessage);
@@ -2013,6 +2363,7 @@ io.on(
 
         // Remove both sides of pair.
         if (partnerId) {
+          const sessionId = pairSessionIds[socket.id];
           delete pairs[
             partnerId
           ];
@@ -2020,6 +2371,9 @@ io.on(
           delete pairs[
             socket.id
           ];
+          delete pairSessionIds[partnerId];
+          delete pairSessionIds[socket.id];
+          if (sessionId) void expireRandomSessionMedia(sessionId);
 
           // IMPORTANT:
           // Partner only gets the
@@ -3116,6 +3470,7 @@ io.on(
             pairs[socket.id] ===
               currentSocketId
           ) {
+            const sessionId = pairSessionIds[socket.id];
             delete pairs[
               socket.id
             ];
@@ -3123,6 +3478,9 @@ io.on(
             delete pairs[
               currentSocketId
             ];
+            delete pairSessionIds[socket.id];
+            delete pairSessionIds[currentSocketId];
+            if (sessionId) void expireRandomSessionMedia(sessionId);
 
             io.to(
               currentSocketId
@@ -3655,6 +4013,7 @@ blockedUsers: []
           pairs[socket.id];
 
         if (partnerId) {
+          const sessionId = pairSessionIds[socket.id];
           delete pairs[
             partnerId
           ];
@@ -3662,6 +4021,9 @@ blockedUsers: []
           delete pairs[
             socket.id
           ];
+          delete pairSessionIds[partnerId];
+          delete pairSessionIds[socket.id];
+          if (sessionId) void expireRandomSessionMedia(sessionId);
 
           io.to(
             partnerId
@@ -3686,6 +4048,15 @@ blockedUsers: []
 const PORT =
   process.env.PORT || 3000;
 
+app.post('/internal/cleanup-media', async (req, res) => {
+  const secret = process.env.MEDIA_CLEANUP_SECRET;
+  if (!secret || req.get('authorization') !== `Bearer ${secret}`) {
+    return res.sendStatus(401);
+  }
+  await runMediaCleanup();
+  return res.json({ success: true });
+});
+
 // ==================================================
 // MONGODB
 // ==================================================
@@ -3698,6 +4069,11 @@ mongoose
     console.log(
       'MongoDB Connected'
     );
+
+    void runMediaCleanup();
+    setInterval(runMediaCleanup, MEDIA_CLEANUP_INTERVAL_MS).unref();
+    setInterval(renewActiveRandomMediaLeases, RANDOM_MEDIA_LEASE_RENEW_INTERVAL_MS).unref();
+    setInterval(cleanupTransientMedia, RANDOM_MEDIA_CLEANUP_INTERVAL_MS).unref();
 
     server.listen(
       PORT,

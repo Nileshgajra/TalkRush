@@ -47,3 +47,6 @@ android/app/google-services.json
 # Temporary files.temp/
 
 .temp/
+
+# Local backend backup - never commit
+backend/server copy.js

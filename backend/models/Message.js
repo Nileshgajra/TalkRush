@@ -33,6 +33,43 @@ const MessageSchema = new mongoose.Schema(
       default: '',
     },
 
+    // Retention fields are optional so pre-retention messages remain readable.
+    mediaRetention: {
+      type: String,
+      enum: ['friend', 'random'],
+      default: undefined,
+      index: true,
+    },
+
+    randomSessionId: {
+      type: String,
+      default: '',
+      index: true,
+    },
+
+    // A renewable lease lets cleanup identify random sessions abandoned by a
+    // process restart without expiring media from a live pairing.
+    randomSessionExpiresAt: {
+      type: Date,
+      default: undefined,
+      index: true,
+    },
+
+    randomSessionEnded: {
+      type: Boolean,
+      default: false,
+    },
+
+    mediaDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    mediaDeleting: {
+      type: Boolean,
+      default: false,
+    },
+
     mediaContentType: {
       type: String,
       default: '',

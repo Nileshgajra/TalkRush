@@ -1,4 +1,5 @@
 import { getAnalytics, logEvent } from "@react-native-firebase/analytics";
+import { getAuth, onIdTokenChanged } from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getInitialNotification,
@@ -13,12 +14,14 @@ import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import {
   AppState,
+  Alert,
   PermissionsAndroid,
   Platform,
 } from 'react-native';
 import mobileAds from 'react-native-google-mobile-ads';
 
 import socket from '../socket';
+import { ensureAnonymousUser } from './utils/auth';
 
 const PROFILE_KEY = '@talkrush_profile';
 const NOTIFICATION_PERMISSION_REQUESTED_KEY =
@@ -140,6 +143,45 @@ const showForegroundFriendMessageNotification = async (
 };
 
 export default function RootLayout() {
+
+  useEffect(() => {
+    let disposed = false;
+    let reportedAnonymousAuthDisabled = false;
+    let activeFirebaseToken = '';
+    const unsubscribe = onIdTokenChanged(getAuth(), async (user) => {
+      try {
+        const currentUser = user || await ensureAnonymousUser();
+        if (disposed) return;
+        const firebaseToken = await currentUser.getIdToken();
+        const saved = await AsyncStorage.getItem(PROFILE_KEY);
+        if (saved) {
+          const profile: Profile = JSON.parse(saved);
+          if (profile.userId !== currentUser.uid) {
+            profile.userId = currentUser.uid;
+            await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+          }
+        }
+        if (socket.connected && activeFirebaseToken !== firebaseToken) {
+          socket.disconnect();
+        }
+        activeFirebaseToken = firebaseToken;
+        if (!socket.connected) socket.connect();
+      } catch (error: any) {
+        console.error('Anonymous Firebase sign-in failed:', error);
+        if (error?.code === 'auth/operation-not-allowed' && !reportedAnonymousAuthDisabled) {
+          reportedAnonymousAuthDisabled = true;
+          Alert.alert(
+            'Authentication setup required',
+            'Enable Anonymous sign-in in the Authentication section of the existing Firebase project.'
+          );
+        }
+      }
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     mobileAds().initialize();

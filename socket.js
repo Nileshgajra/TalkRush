@@ -1,10 +1,19 @@
 import { io } from 'socket.io-client';
+import { getAuth } from '@react-native-firebase/auth';
 
 const socket = io(
   'https://talkrush.onrender.com',
   {
     transports: ['websocket'],
-    autoConnect: true,
+    autoConnect: false,
+    auth: async (callback) => {
+      try {
+        const user = getAuth().currentUser;
+        callback(user ? { token: await user.getIdToken() } : {});
+      } catch {
+        callback({});
+      }
+    },
   }
 );
 
