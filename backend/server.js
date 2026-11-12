@@ -5,7 +5,9 @@ const FriendRequest = require('./models/FriendRequest');
 const Message = require('./models/Message');
 const PendingMediaUpload = require('./models/PendingMediaUpload');
 const Report = require('./models/Report');
-const firebaseAdmin = require('firebase-admin');
+const { cert, getApps, initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getMessaging } = require('firebase-admin/messaging');
 const { createClient } = require('@supabase/supabase-js');
 const { randomUUID } = require('crypto');
 const http = require('http');
@@ -119,16 +121,7 @@ function getFirebaseMessaging() {
   }
 
   try {
-    if (!firebaseAdmin.apps.length) {
-      firebaseAdmin.initializeApp({
-        credential:
-          firebaseAdmin.credential.cert(
-            JSON.parse(serviceAccountJson)
-          ),
-      });
-    }
-
-    return firebaseAdmin.messaging();
+    return getMessaging(initializeFirebaseAdmin(serviceAccountJson));
 
   } catch (error) {
     console.error(
@@ -143,10 +136,16 @@ function getFirebaseMessaging() {
 function getFirebaseAuth() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!serviceAccountJson) throw new Error('FIREBASE_SERVICE_ACCOUNT is required for socket authentication');
-  if (!firebaseAdmin.apps.length) {
-    firebaseAdmin.initializeApp({ credential: firebaseAdmin.credential.cert(JSON.parse(serviceAccountJson)) });
-  }
-  return firebaseAdmin.auth();
+  return getAuth(initializeFirebaseAdmin(serviceAccountJson));
+}
+
+function initializeFirebaseAdmin(serviceAccountJson) {
+  const existingApps = getApps();
+  if (existingApps.length) return existingApps[0];
+
+  return initializeApp({
+    credential: cert(JSON.parse(serviceAccountJson)),
+  });
 }
 
 io.use(async (socket, next) => {
