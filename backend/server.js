@@ -606,24 +606,85 @@ async function toMessageData(message) {
   };
 }
 
+function sanitizeMediaDiagnosticValue(value) {
+  return String(value || '')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '[redacted-url]')
+    .replace(/([?&](?:token|apikey|api_key|authorization)=)[^&\s]*/gi, '$1[redacted]');
+}
+
+function getMediaDiagnosticObjectPath(mediaPath) {
+  const path = String(mediaPath || '');
+  const generatedMediaPath =
+    /^chat-media\/[^/]+\/\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|mp4|mov|webm)$/i;
+
+  return generatedMediaPath.test(path)
+    ? path
+    : path
+      ? '[invalid-or-untrusted-object-path]'
+      : '';
+}
+
+function logMediaVerificationFailure(operation, mediaPath, error, fallbackMessage) {
+  console.error('Media upload verification failed:', {
+    operation,
+    errorName: error?.name || (error ? 'Error' : 'VerificationFailed'),
+    errorMessage: sanitizeMediaDiagnosticValue(
+      error?.message || error || fallbackMessage || 'Verification failed without an exception.'
+    ),
+    supabaseStatus: error?.status ?? error?.statusCode ?? null,
+    supabaseCode: error?.code ?? null,
+    objectPath: getMediaDiagnosticObjectPath(mediaPath),
+  });
+}
+
 async function consumePendingMediaUpload(socket, mediaPath) {
   const pending =
     socket.pendingMediaUploads?.get(mediaPath);
 
-  if (!pending || pending.expiresAt < Date.now()) {
-    if (pending) {
-      socket.pendingMediaUploads.delete(mediaPath);
-    }
-
+  if (!pending) {
+    logMediaVerificationFailure(
+      'lookupPendingUpload',
+      mediaPath,
+      null,
+      'No pending upload was registered for this object path.'
+    );
     return null;
   }
 
-  const storage = getSupabaseStorage();
+  if (pending.expiresAt < Date.now()) {
+    socket.pendingMediaUploads.delete(mediaPath);
+    logMediaVerificationFailure(
+      'checkPendingUploadExpiry',
+      mediaPath,
+      null,
+      'The pending upload has expired.'
+    );
+    return null;
+  }
+
+  let storage;
+  try {
+    storage = getSupabaseStorage();
+  } catch (error) {
+    logMediaVerificationFailure(
+      'getSupabaseStorage',
+      mediaPath,
+      error
+    );
+    throw error;
+  }
 
   if (!storage) {
+    logMediaVerificationFailure(
+      'getSupabaseStorage',
+      mediaPath,
+      null,
+      'Supabase storage client is not configured.'
+    );
     return null;
   }
 
+  let operation = 'claimPendingUpload';
   try {
     const now = new Date();
     const storedPending = await PendingMediaUpload.findOneAndUpdate(
@@ -648,14 +709,24 @@ async function consumePendingMediaUpload(socket, mediaPath) {
       { new: true }
     ).lean();
 
-    if (
-      !storedPending ||
-      storedPending.chatType !== pending.chatType ||
-      storedPending.receiverId !== pending.receiverId ||
-      storedPending.mediaType !== pending.type ||
-      (storedPending.randomSessionId || '') !== (pending.randomSessionId || '')
-    ) {
+    const pendingMismatch = !storedPending
+      ? ['pendingRecordUnavailable']
+      : [
+          storedPending.chatType !== pending.chatType && 'chatType',
+          storedPending.receiverId !== pending.receiverId && 'receiverId',
+          storedPending.mediaType !== pending.type && 'mediaType',
+          (storedPending.randomSessionId || '') !== (pending.randomSessionId || '') && 'randomSessionId',
+        ].filter(Boolean);
+
+    if (!storedPending || pendingMismatch.length > 0) {
+      logMediaVerificationFailure(
+        'claimAndComparePendingUpload',
+        mediaPath,
+        null,
+        `Pending upload record is unavailable or does not match (${pendingMismatch.join(', ')}).`
+      );
       if (storedPending) {
+        operation = 'releasePendingUploadClaim';
         await PendingMediaUpload.updateOne(
           { _id: storedPending._id, finalized: { $ne: true } },
           { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
@@ -664,17 +735,29 @@ async function consumePendingMediaUpload(socket, mediaPath) {
       return null;
     }
 
+    operation = 'storage.bucket.info';
     const {
       data: metadata,
       error,
     } = await storage.bucket.info(mediaPath);
 
-    if (
-      error ||
-      !metadata ||
-      metadata.contentType !== pending.contentType ||
-      Number(metadata.size) !== pending.size
-    ) {
+    const metadataMismatch = !metadata
+      ? ['metadataUnavailable']
+      : [
+          metadata.contentType !== pending.contentType && 'contentType',
+          Number(metadata.size) !== pending.size && 'size',
+        ].filter(Boolean);
+
+    if (error || !metadata || metadataMismatch.length > 0) {
+      logMediaVerificationFailure(
+        'storage.bucket.info',
+        mediaPath,
+        error,
+        error
+          ? undefined
+          : `Uploaded object metadata is unavailable or does not match (${metadataMismatch.join(', ')}).`
+      );
+      operation = 'releasePendingUploadClaim';
       await PendingMediaUpload.updateOne(
         { _id: storedPending._id, finalized: { $ne: true } },
         { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
@@ -686,15 +769,22 @@ async function consumePendingMediaUpload(socket, mediaPath) {
     return pending;
 
   } catch (error) {
-    console.error(
-      'Media upload verification error:',
-      error?.code || 'unknown error'
+    logMediaVerificationFailure(
+      operation,
+      mediaPath,
+      error
     );
 
     await PendingMediaUpload.updateOne(
       { mediaPath, userId: socket.userId, finalized: { $ne: true } },
       { $set: { finalizing: false }, $unset: { finalizingUntil: 1 } }
-    ).catch((releaseError) => console.error('Pending upload claim release failed:', releaseError?.message || releaseError));
+    ).catch((releaseError) => {
+      logMediaVerificationFailure(
+        'releasePendingUploadClaim',
+        mediaPath,
+        releaseError
+      );
+    });
 
     return null;
   }
