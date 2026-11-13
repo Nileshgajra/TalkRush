@@ -2133,7 +2133,9 @@ export default function ChatScreen() {
 
       const size = await getMediaFileSize(
         asset.uri,
-        asset.fileSize
+        mediaDetails.type === 'video'
+          ? asset.fileSize
+          : undefined
       );
       const duration = mediaDetails.type === 'video'
         ? (asset.duration || 0) / 1000

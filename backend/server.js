@@ -624,7 +624,7 @@ function getMediaDiagnosticObjectPath(mediaPath) {
       : '';
 }
 
-function logMediaVerificationFailure(operation, mediaPath, error, fallbackMessage) {
+function logMediaVerificationFailure(operation, mediaPath, error, fallbackMessage, sizeDetails = {}) {
   console.error('Media upload verification failed:', {
     operation,
     errorName: error?.name || (error ? 'Error' : 'VerificationFailed'),
@@ -634,6 +634,8 @@ function logMediaVerificationFailure(operation, mediaPath, error, fallbackMessag
     supabaseStatus: error?.status ?? error?.statusCode ?? null,
     supabaseCode: error?.code ?? null,
     objectPath: getMediaDiagnosticObjectPath(mediaPath),
+    expectedSizeBytes: sizeDetails.expectedSizeBytes ?? null,
+    actualSizeBytes: sizeDetails.actualSizeBytes ?? null,
   });
 }
 
@@ -715,6 +717,8 @@ async function consumePendingMediaUpload(socket, mediaPath) {
           storedPending.chatType !== pending.chatType && 'chatType',
           storedPending.receiverId !== pending.receiverId && 'receiverId',
           storedPending.mediaType !== pending.type && 'mediaType',
+          storedPending.contentType !== pending.contentType && 'contentType',
+          Number(storedPending.size) !== pending.size && 'size',
           (storedPending.randomSessionId || '') !== (pending.randomSessionId || '') && 'randomSessionId',
         ].filter(Boolean);
 
@@ -741,11 +745,14 @@ async function consumePendingMediaUpload(socket, mediaPath) {
       error,
     } = await storage.bucket.info(mediaPath);
 
+    const expectedSizeBytes = Number(storedPending.size);
+    const actualSizeBytes = Number(metadata?.size);
     const metadataMismatch = !metadata
       ? ['metadataUnavailable']
       : [
-          metadata.contentType !== pending.contentType && 'contentType',
-          Number(metadata.size) !== pending.size && 'size',
+          metadata.contentType !== storedPending.contentType && 'contentType',
+          !Number.isFinite(actualSizeBytes) && 'sizeUnavailable',
+          Number.isFinite(actualSizeBytes) && actualSizeBytes !== expectedSizeBytes && 'size',
         ].filter(Boolean);
 
     if (error || !metadata || metadataMismatch.length > 0) {
@@ -755,7 +762,11 @@ async function consumePendingMediaUpload(socket, mediaPath) {
         error,
         error
           ? undefined
-          : `Uploaded object metadata is unavailable or does not match (${metadataMismatch.join(', ')}).`
+          : `Uploaded object metadata is unavailable or does not match (${metadataMismatch.join(', ')}).`,
+        {
+          expectedSizeBytes: Number.isFinite(expectedSizeBytes) ? expectedSizeBytes : null,
+          actualSizeBytes: Number.isFinite(actualSizeBytes) ? actualSizeBytes : null,
+        }
       );
       operation = 'releasePendingUploadClaim';
       await PendingMediaUpload.updateOne(
