@@ -2755,19 +2755,22 @@ io.on(
 
     socket.on(
       'get-friend-data',
-      async ({
-        userId,
-      }) => {
+      async (data = {}) => {
+        const { userId, requestId } = data;
+        const sendFriendData = (result) => {
+          socket.emit('friend-data', {
+            ...result,
+            requestId,
+          });
+        };
+
         try {
           if (!userId) {
-            socket.emit(
-              'friend-data',
-              {
-                success: false,
-                friends: [],
-                requests: [],
-              }
-            );
+            sendFriendData({
+              success: false,
+              friends: [],
+              requests: [],
+            });
 
             return;
           }
@@ -2777,14 +2780,11 @@ io.on(
             socket.userId !==
               userId
           ) {
-            socket.emit(
-              'friend-data',
-              {
-                success: false,
-                friends: [],
-                requests: [],
-              }
-            );
+            sendFriendData({
+              success: false,
+              friends: [],
+              requests: [],
+            });
 
             return;
           }
@@ -2795,14 +2795,11 @@ io.on(
             }).lean();
 
           if (!user) {
-            socket.emit(
-              'friend-data',
-              {
-                success: true,
-                friends: [],
-                requests: [],
-              }
-            );
+            sendFriendData({
+              success: true,
+              friends: [],
+              requests: [],
+            });
 
             return;
           }
@@ -2810,31 +2807,22 @@ io.on(
           const friendIds =
             user.friends || [];
 
-          const friendUsers =
-            await User.find({
-              userId: {
-                $in:
-                  friendIds,
-              },
-            })
-              .select(
-                'userId name age gender'
-              )
-              .lean();
-
-          const pendingRequests =
-            await FriendRequest.find({
-              toUserId:
-                userId,
-
-              status:
-                'pending',
-            })
-              .sort({
-                createdAt:
-                  -1,
+          const [friendUsers, pendingRequests] =
+            await Promise.all([
+              User.find({
+                userId: {
+                  $in: friendIds,
+                },
               })
-              .lean();
+                .select('userId name age gender')
+                .lean(),
+              FriendRequest.find({
+                toUserId: userId,
+                status: 'pending',
+              })
+                .sort({ createdAt: -1 })
+                .lean(),
+            ]);
 
           const senderIds =
             pendingRequests.map(
@@ -2909,16 +2897,11 @@ io.on(
               }
             );
 
-          socket.emit(
-            'friend-data',
-            {
-              success: true,
-
-              friends,
-
-              requests,
-            }
-          );
+          sendFriendData({
+            success: true,
+            friends,
+            requests,
+          });
 
         } catch (error) {
           console.error(
@@ -2926,14 +2909,11 @@ io.on(
             error
           );
 
-          socket.emit(
-            'friend-data',
-            {
-              success: false,
-              friends: [],
-              requests: [],
-            }
-          );
+          sendFriendData({
+            success: false,
+            friends: [],
+            requests: [],
+          });
         }
       }
     );
